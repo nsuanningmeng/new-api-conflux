@@ -102,6 +102,22 @@ export function truncateText(text: string, maxLength: number): string {
  * @param text - Text that might be JSON
  * @returns Pretty-printed JSON or original text
  */
+/**
+ * Validates that a string is a safe HTTP/HTTPS URL to redirect to
+ */
+export function isSafeHttpPaymentUrl(value: string): boolean {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return false
+  }
+  try {
+    const url = new URL(trimmed)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 export function tryPrettyJson(text: string): string {
   const raw = (text ?? '').toString().trim()
   if (!raw) return ''

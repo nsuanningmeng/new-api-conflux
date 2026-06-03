@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useState, useCallback } from 'react'
 import i18next from 'i18next'
+import { isSafeHttpPaymentUrl } from '@/lib/utils'
 import { toast } from 'sonner'
 import {
   calculateAmount,
@@ -184,18 +185,6 @@ function getConfluxAPIPaymentUrl(data: unknown): string | null {
   return null
 }
 
-function isSafeHttpPaymentUrl(value: string): boolean {
-  const trimmed = value.trim()
-  if (!trimmed) {
-    return false
-  }
-  try {
-    const url = new URL(trimmed)
-    return url.protocol === 'http:' || url.protocol === 'https:'
-  } catch {
-    return false
-  }
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object'

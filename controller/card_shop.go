@@ -1,0 +1,242 @@
+package controller
+
+import (
+	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting"
+	"github.com/gin-gonic/gin"
+	"github.com/thanhpk/randstr"
+)
+
+type createCardShopOrderRequest struct {
+	ProductID int64 `json:"product_id"`
+}
+
+func GetCardShopProducts(c *gin.Context) {
+	products, err := model.GetAllEnabledProducts()
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取商品列表失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "success", "data": products})
+}
+
+func GetCardShopProduct(c *gin.Context) {
+	productID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || productID <= 0 {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "无效的商品ID"})
+		return
+	}
+	product, err := model.GetProductByID(productID)
+	if err != nil || product == nil || !product.Enabled {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "商品不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "success", "data": product})
+}
+
+func CreateCardShopOrder(c *gin.Context) {
+	if !setting.ConfluxAPIEnabled {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "Conflux 支付未启用"})
+		return
+	}
+	if !isConfluxAPITopUpEnabled() {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "Conflux 配置不完整"})
+		return
+	}
+
+	var req createCardShopOrderRequest
+	if err := c.ShouldBindJSON(&req); err != nil || req.ProductID <= 0 {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
+		return
+	}
+
+	product, err := model.GetProductByID(req.ProductID)
+	if err != nil || product == nil {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "商品不存在"})
+		return
+	}
+	if !product.Enabled {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "商品已下架"})
+		return
+	}
+	if product.Stock <= 0 {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "商品库存不足"})
+		return
+	}
+	if product.Price <= 0 {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "商品价格无效"})
+		return
+	}
+
+	userID := c.GetInt("id")
+	user, err := model.GetUserById(userID, false)
+	if err != nil || user == nil {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "用户不存在"})
+		return
+	}
+
+	group, err := model.GetUserGroup(userID, true)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取用户分组失败"})
+		return
+	}
+
+	payMoney := getConfluxAPIPayMoney(product.Price, group)
+	if payMoney < 0.01 {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "支付金额过低"})
+		return
+	}
+
+	tradeNo := fmt.Sprintf("%s%d-%d-%s", model.CardShopTradeNoPrefix, userID, time.Now().UnixMilli(), randstr.String(6))
+	order := &model.CardOrder{
+		UserID:      userID,
+		ProductID:   product.ID,
+		TradeNo:     tradeNo,
+		Amount:      product.Price,
+		Money:       payMoney,
+		Status:      model.CardShopOrderPending,
+		ProductName: product.Name,
+		CreateTime:  common.GetTimestamp(),
+	}
+	if err := model.CreateCardOrder(order); err != nil {
+		logger.LogError(c.Request.Context(), fmt.Sprintf("CardShop 创建订单失败 user_id=%d product_id=%d trade_no=%s error=%q", userID, product.ID, tradeNo, err.Error()))
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "创建订单失败"})
+		return
+	}
+
+	notifyURL, err := getConfluxAPINotifyURL()
+	if err != nil {
+		logger.LogWarn(c.Request.Context(), fmt.Sprintf("CardShop ConfluxAPI 异步通知地址未配置 user_id=%d trade_no=%s error=%q", userID, tradeNo, err.Error()))
+		_ = model.MarkOrderFailed(tradeNo)
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "异步通知地址未配置"})
+		return
+	}
+
+	returnURL := firstNonEmpty(strings.TrimSpace(setting.ConfluxAPIReturnURL), paymentReturnPath("/payment/success"))
+	cancelURL := firstNonEmpty(strings.TrimSpace(setting.ConfluxAPICancelURL), paymentReturnPath("/console/topup"))
+	formattedAmount := formatConfluxAPIAmount(payMoney, getConfluxAPICurrency())
+	paymentReq := confluxAPICreatePaymentRequest{
+		MchNo:       strings.TrimSpace(setting.ConfluxAPIMchNo),
+		GatewayNo:   strings.TrimSpace(setting.ConfluxAPIGatewayNo),
+		MchOrderNo:  tradeNo,
+		Amount:      formattedAmount,
+		Currency:    getConfluxAPICurrency(),
+		ReturnURL:   returnURL,
+		CancelURL:   cancelURL,
+		NotifyURL:   notifyURL,
+		Description: fmt.Sprintf("Card shop product %s", product.Name),
+		Locale:      getConfluxAPILanguage(c),
+		Customer: &confluxAPICustomer{
+			ID:    fmt.Sprintf("user_%d", userID),
+			Email: strings.TrimSpace(user.Email),
+			Name:  firstNonEmpty(strings.TrimSpace(user.DisplayName), strings.TrimSpace(user.Username)),
+		},
+		DeviceInfo: &confluxAPIDeviceInfo{
+			ClientIP:    getConfluxAPIClientIP(c),
+			BrowserInfo: getConfluxAPIBrowserInfo(c),
+			Language:    getConfluxAPILanguage(c),
+		},
+		LineItems: []confluxAPILineItem{
+			{
+				Name:        product.Name,
+				Description: product.Description,
+				Quantity:    1,
+				UnitAmount:  formattedAmount,
+				Amount:      formattedAmount,
+				Currency:    getConfluxAPICurrency(),
+			},
+		},
+		CustomParams: map[string]any{
+			"user_id":    userID,
+			"product_id": product.ID,
+			"order_type": "cardshop",
+		},
+	}
+
+	paymentResp, err := createConfluxAPIPayment(paymentReq)
+	if err != nil {
+		logger.LogError(c.Request.Context(), fmt.Sprintf("CardShop ConfluxAPI 创建支付订单失败 user_id=%d trade_no=%s error=%q", userID, tradeNo, err.Error()))
+		_ = model.MarkOrderFailed(tradeNo)
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "拉起支付失败"})
+		return
+	}
+
+	if !paymentResp.Success || paymentResp.Code != "0000" {
+		logger.LogWarn(c.Request.Context(), fmt.Sprintf("CardShop ConfluxAPI 创建支付订单业务失败 user_id=%d trade_no=%s code=%s message=%q", userID, tradeNo, paymentResp.Code, paymentResp.Message))
+		_ = model.MarkOrderFailed(tradeNo)
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": firstNonEmpty(paymentResp.Message, "拉起支付失败")})
+		return
+	}
+
+	if strings.EqualFold(paymentResp.Data.TradeStatus, "FAILED") {
+		_ = model.MarkOrderFailed(tradeNo)
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": firstNonEmpty(paymentResp.Data.FailReason, "拉起支付失败")})
+		return
+	}
+
+	paymentURL := firstNonEmpty(paymentResp.Data.CheckoutURL, paymentResp.Data.PaymentURL, paymentResp.Data.NextAction.URL, paymentResp.Data.NextAction.QRCode)
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf("CardShop ConfluxAPI 收银台创建成功 user_id=%d product_id=%d trade_no=%s flow_order_no=%s amount=%d money=%.2f", userID, product.ID, tradeNo, paymentResp.Data.FlowOrderNo, product.Price, payMoney))
+	c.JSON(http.StatusOK, gin.H{
+		"message": "success",
+		"data": gin.H{
+			"payment_url":   paymentURL,
+			"action_type":   paymentResp.Data.NextAction.Type,
+			"qr_code":       paymentResp.Data.NextAction.QRCode,
+			"checkout_url":  firstNonEmpty(paymentResp.Data.CheckoutURL, paymentResp.Data.NextAction.URL),
+			"flow_order_no": paymentResp.Data.FlowOrderNo,
+			"trade_no":      tradeNo,
+			"order_id":      order.ID,
+		},
+	})
+}
+
+func GetCardShopOrders(c *gin.Context) {
+	userID := c.GetInt("id")
+	pageInfo := common.GetPageQuery(c)
+	orders, total, err := model.GetCardOrdersByUserID(userID, pageInfo)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取订单列表失败"})
+		return
+	}
+	pageInfo.SetTotal(int(total))
+	pageInfo.SetItems(orders)
+	c.JSON(http.StatusOK, gin.H{"message": "success", "data": pageInfo})
+}
+
+func GetCardShopOrderDetail(c *gin.Context) {
+	orderID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || orderID <= 0 {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "无效的订单ID"})
+		return
+	}
+
+	order, err := model.GetCardOrderByID(orderID)
+	if err != nil || order == nil || order.UserID != c.GetInt("id") {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "订单不存在"})
+		return
+	}
+
+	data := gin.H{"order": order}
+	if order.Status == model.CardShopOrderDelivered && order.CardID > 0 {
+		card, err := model.GetCardByID(order.CardID)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"message": "error", "data": "卡密解密失败"})
+			return
+		}
+		data["card"] = gin.H{
+			"id":           card.ID,
+			"card_content": card.CardContent,
+			"card_display": card.CardDisplay,
+			"status":       card.Status,
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "success", "data": data})
+}

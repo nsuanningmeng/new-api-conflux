@@ -183,7 +183,7 @@ export type ModelSettings = {
   'model_deployment.ionet.enabled': boolean
 }
 
-export type BillingSettings = {
+export type CardShopSettingsValues = {`n  CardShopEnabled?: boolean`n}`n`nexport type BillingSettings = {
   QuotaForNewUser: number
   PreConsumedQuota: number
   QuotaForInviter: number
@@ -405,3 +405,4 @@ export type UpstreamRatiosResponse = {
     test_results: TestResult[]
   }
 }
+

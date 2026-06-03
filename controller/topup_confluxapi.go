@@ -382,12 +382,28 @@ func ConfluxAPINotify(c *gin.Context) {
 
 	switch strings.ToUpper(strings.TrimSpace(paymentData.TradeStatus)) {
 	case "SUCCESS":
+		if strings.HasPrefix(paymentData.MchOrderNo, model.CardShopTradeNoPrefix) {
+			if err := model.DeliverCardOrder(paymentData.MchOrderNo); err != nil {
+				logger.LogError(c.Request.Context(), fmt.Sprintf("ConfluxAPI 卡密订单自动发卡失败 trade_no=%s notify_id=%s client_ip=%s error=%q", paymentData.MchOrderNo, notifyReq.NotifyID, c.ClientIP(), err.Error()))
+				c.String(http.StatusInternalServerError, "fail")
+				return
+			}
+			break
+		}
 		if err := model.RechargeConfluxAPI(paymentData.MchOrderNo, c.ClientIP()); err != nil {
 			logger.LogError(c.Request.Context(), fmt.Sprintf("ConfluxAPI 充值处理失败 trade_no=%s notify_id=%s client_ip=%s error=%q", paymentData.MchOrderNo, notifyReq.NotifyID, c.ClientIP(), err.Error()))
 			c.String(http.StatusInternalServerError, "fail")
 			return
 		}
 	case "FAILED":
+		if strings.HasPrefix(paymentData.MchOrderNo, model.CardShopTradeNoPrefix) {
+			if err := model.MarkOrderFailed(paymentData.MchOrderNo); err != nil {
+				logger.LogError(c.Request.Context(), fmt.Sprintf("ConfluxAPI 标记卡密订单失败 trade_no=%s notify_id=%s error=%q", paymentData.MchOrderNo, notifyReq.NotifyID, err.Error()))
+				c.String(http.StatusInternalServerError, "fail")
+				return
+			}
+			break
+		}
 		if err := model.UpdatePendingTopUpStatus(paymentData.MchOrderNo, model.PaymentProviderConfluxAPI, common.TopUpStatusFailed); err != nil &&
 			err != model.ErrPaymentMethodMismatch {
 			logger.LogError(c.Request.Context(), fmt.Sprintf("ConfluxAPI 标记失败订单状态失败 trade_no=%s notify_id=%s error=%q", paymentData.MchOrderNo, notifyReq.NotifyID, err.Error()))

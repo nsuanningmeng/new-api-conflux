@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { parseCurrencyDisplayType } from '@/lib/currency'
+import { CardShopAdminSection } from '../integrations/card-shop-admin-section'
 import { CheckinSettingsSection } from '../general/checkin-settings-section'
 import { PricingSection } from '../general/pricing-section'
 import { QuotaSettingsSection } from '../general/quota-settings-section'
@@ -212,6 +213,14 @@ const BILLING_SECTIONS = [
           confirmedBy: settings['payment_setting.compliance_confirmed_by'] ?? 0,
         }}
       />
+    ),
+  },
+  {
+    id: 'card-shop',
+    titleKey: 'Card Shop',
+    descriptionKey: 'Manage card shop products and inventory',
+    build: (_settings: BillingSettings) => (
+      <CardShopAdminSection />
     ),
   },
   {

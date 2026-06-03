@@ -1,4 +1,4 @@
-{
+﻿{
   "translation": {
     "360": "360",
     "1000": "1000",
@@ -4514,6 +4514,25 @@
     "Zero retention": "零数据保留",
     "Zhipu": "智谱",
     "Zhipu V4": "智谱 V4",
-    "Zoom": "缩放"
+    "Zoom": "缩放",
+    "AI Account Shop": "AI 账号商店",
+    "Buy Now": "立即购买",
+    "Sold Out": "已售罄",
+    "My Orders": "我的订单",
+    "Card Shop Management": "发卡管理",
+    "Import Cards": "导入卡密",
+    "Card Content": "卡密内容",
+    "Order No": "订单号",
+    "Product Name": "商品名称",
+    "Delivered": "已发货",
+    "AI Account Shop description": "购买 AI 账号或礼品卡，卡密即时自动发放。",
+    "Stock": "库存",
+    "Card Secrets": "卡密列表",
+    "One card per line": "一行一个卡密",
+    "Importing...": "导入中...",
+    "Products": "商品管理",
+    "All Orders": "全部订单",
+    "New Product": "新建商品",
+    "No products available at the moment": "暂无商品可用"
   }
 }
