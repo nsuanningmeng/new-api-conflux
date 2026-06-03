@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -27,6 +28,9 @@ import (
 const (
 	confluxAPICheckoutCreatePath = "/api/v1/checkout/create"
 )
+
+const confluxAPICardShopWebhookMaxAgeSeconds int64 = 5 * 60
+var processedConfluxAPICardShopNotifyIDs sync.Map
 
 type ConfluxAPIPayRequest struct {
 	Amount int64 `json:"amount"`
@@ -377,17 +381,45 @@ func ConfluxAPINotify(c *gin.Context) {
 		return
 	}
 
+	isCardShopOrder := strings.HasPrefix(paymentData.MchOrderNo, model.CardShopTradeNoPrefix)
+	cardShopReplayKey := ""
+	cardShopProcessed := false
+	if isCardShopOrder {
+		if !isConfluxAPINotifyFresh(notifyReq.Timestamp) || strings.TrimSpace(notifyReq.NotifyID) == "" {
+			c.String(http.StatusUnauthorized, "fail")
+			return
+		}
+		cleanupConfluxAPICardShopNotifyReplay(common.GetTimestamp())
+		cardShopReplayKey = paymentData.MchOrderNo + ":" + notifyReq.NotifyID
+		if _, loaded := processedConfluxAPICardShopNotifyIDs.LoadOrStore(cardShopReplayKey, common.GetTimestamp()); loaded {
+			logger.LogInfo(c.Request.Context(), fmt.Sprintf("ConfluxAPI cardshop webhook replay ignored trade_no=%s notify_id=%s", paymentData.MchOrderNo, notifyReq.NotifyID))
+			c.String(http.StatusOK, "success")
+			return
+		}
+		defer func() {
+			if !cardShopProcessed && cardShopReplayKey != "" {
+				processedConfluxAPICardShopNotifyIDs.Delete(cardShopReplayKey)
+			}
+		}()
+	}
+
 	LockOrder(paymentData.MchOrderNo)
 	defer UnlockOrder(paymentData.MchOrderNo)
 
 	switch strings.ToUpper(strings.TrimSpace(paymentData.TradeStatus)) {
 	case "SUCCESS":
-		if strings.HasPrefix(paymentData.MchOrderNo, model.CardShopTradeNoPrefix) {
-			if err := model.DeliverCardOrder(paymentData.MchOrderNo); err != nil {
+		if isCardShopOrder {
+			if err := model.CompleteCardOrderPaymentAndDeliver(
+				paymentData.MchOrderNo,
+				paymentData.Amount,
+				paymentData.Currency,
+				paymentData.FlowOrderNo,
+			); err != nil {
 				logger.LogError(c.Request.Context(), fmt.Sprintf("ConfluxAPI 卡密订单自动发卡失败 trade_no=%s notify_id=%s client_ip=%s error=%q", paymentData.MchOrderNo, notifyReq.NotifyID, c.ClientIP(), err.Error()))
 				c.String(http.StatusInternalServerError, "fail")
 				return
 			}
+			cardShopProcessed = true
 			break
 		}
 		if err := model.RechargeConfluxAPI(paymentData.MchOrderNo, c.ClientIP()); err != nil {
@@ -396,12 +428,13 @@ func ConfluxAPINotify(c *gin.Context) {
 			return
 		}
 	case "FAILED":
-		if strings.HasPrefix(paymentData.MchOrderNo, model.CardShopTradeNoPrefix) {
+		if isCardShopOrder {
 			if err := model.MarkOrderFailed(paymentData.MchOrderNo); err != nil {
 				logger.LogError(c.Request.Context(), fmt.Sprintf("ConfluxAPI 标记卡密订单失败 trade_no=%s notify_id=%s error=%q", paymentData.MchOrderNo, notifyReq.NotifyID, err.Error()))
 				c.String(http.StatusInternalServerError, "fail")
 				return
 			}
+			cardShopProcessed = true
 			break
 		}
 		if err := model.UpdatePendingTopUpStatus(paymentData.MchOrderNo, model.PaymentProviderConfluxAPI, common.TopUpStatusFailed); err != nil &&
@@ -412,6 +445,7 @@ func ConfluxAPINotify(c *gin.Context) {
 		}
 	default:
 		logger.LogInfo(c.Request.Context(), fmt.Sprintf("ConfluxAPI webhook 订单状态非终态，忽略 trade_no=%s trade_status=%s notify_id=%s", paymentData.MchOrderNo, paymentData.TradeStatus, notifyReq.NotifyID))
+		cardShopProcessed = isCardShopOrder
 	}
 
 	c.String(http.StatusOK, "success")
@@ -590,6 +624,31 @@ func verifyConfluxAPINotifySign(req confluxAPINotifyRequest) bool {
 	mac.Write([]byte(signContent))
 	expected := hex.EncodeToString(mac.Sum(nil))
 	return hmac.Equal([]byte(strings.ToLower(expected)), []byte(strings.ToLower(req.Sign)))
+}
+
+func isConfluxAPINotifyFresh(timestamp int64) bool {
+	if timestamp <= 0 {
+		return false
+	}
+	eventSeconds := timestamp
+	if eventSeconds > 1000000000000 {
+		eventSeconds = eventSeconds / 1000
+	}
+	now := common.GetTimestamp()
+	age := now - eventSeconds
+	if age < 0 {
+		age = -age
+	}
+	return age <= confluxAPICardShopWebhookMaxAgeSeconds
+}
+
+func cleanupConfluxAPICardShopNotifyReplay(now int64) {
+	processedConfluxAPICardShopNotifyIDs.Range(func(key, value any) bool {
+		if ts, ok := value.(int64); ok && now-ts > confluxAPICardShopWebhookMaxAgeSeconds*2 {
+			processedConfluxAPICardShopNotifyIDs.Delete(key)
+		}
+		return true
+	})
 }
 
 func firstNonEmpty(values ...string) string {

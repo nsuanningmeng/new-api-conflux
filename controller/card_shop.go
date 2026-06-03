@@ -83,30 +83,28 @@ func CreateCardShopOrder(c *gin.Context) {
 		return
 	}
 
-	group, err := model.GetUserGroup(userID, true)
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取用户分组失败"})
-		return
-	}
-
-	payMoney := getConfluxAPIPayMoney(product.Price, group)
+	payMoney := getCardShopPayMoney(product.Price)
 	if payMoney < 0.01 {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "支付金额过低"})
 		return
 	}
 
+	currency := getConfluxAPICurrency()
+	formattedAmount := formatConfluxAPIAmount(payMoney, currency)
 	tradeNo := fmt.Sprintf("%s%d-%d-%s", model.CardShopTradeNoPrefix, userID, time.Now().UnixMilli(), randstr.String(6))
 	order := &model.CardOrder{
-		UserID:      userID,
-		ProductID:   product.ID,
-		TradeNo:     tradeNo,
-		Amount:      product.Price,
-		Money:       payMoney,
-		Status:      model.CardShopOrderPending,
-		ProductName: product.Name,
-		CreateTime:  common.GetTimestamp(),
+		UserID:         userID,
+		ProductID:      product.ID,
+		TradeNo:        tradeNo,
+		Amount:         product.Price,
+		Money:          payMoney,
+		Status:         model.CardShopOrderPending,
+		ExpectedAmount: formattedAmount,
+		Currency:       currency,
+		ProductName:    product.Name,
+		CreateTime:     common.GetTimestamp(),
 	}
-	if err := model.CreateCardOrder(order); err != nil {
+	if err := model.CreateReservedCardOrder(order); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("CardShop 创建订单失败 user_id=%d product_id=%d trade_no=%s error=%q", userID, product.ID, tradeNo, err.Error()))
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "创建订单失败"})
 		return
@@ -122,13 +120,12 @@ func CreateCardShopOrder(c *gin.Context) {
 
 	returnURL := firstNonEmpty(strings.TrimSpace(setting.ConfluxAPIReturnURL), paymentReturnPath("/payment/success"))
 	cancelURL := firstNonEmpty(strings.TrimSpace(setting.ConfluxAPICancelURL), paymentReturnPath("/console/topup"))
-	formattedAmount := formatConfluxAPIAmount(payMoney, getConfluxAPICurrency())
 	paymentReq := confluxAPICreatePaymentRequest{
 		MchNo:       strings.TrimSpace(setting.ConfluxAPIMchNo),
 		GatewayNo:   strings.TrimSpace(setting.ConfluxAPIGatewayNo),
 		MchOrderNo:  tradeNo,
 		Amount:      formattedAmount,
-		Currency:    getConfluxAPICurrency(),
+		Currency:    currency,
 		ReturnURL:   returnURL,
 		CancelURL:   cancelURL,
 		NotifyURL:   notifyURL,
@@ -151,7 +148,7 @@ func CreateCardShopOrder(c *gin.Context) {
 				Quantity:    1,
 				UnitAmount:  formattedAmount,
 				Amount:      formattedAmount,
-				Currency:    getConfluxAPICurrency(),
+				Currency:    currency,
 			},
 		},
 		CustomParams: map[string]any{
@@ -179,6 +176,22 @@ func CreateCardShopOrder(c *gin.Context) {
 	if strings.EqualFold(paymentResp.Data.TradeStatus, "FAILED") {
 		_ = model.MarkOrderFailed(tradeNo)
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": firstNonEmpty(paymentResp.Data.FailReason, "拉起支付失败")})
+		return
+	}
+
+	if strings.TrimSpace(paymentResp.Data.MchOrderNo) != "" && paymentResp.Data.MchOrderNo != tradeNo {
+		_ = model.MarkOrderFailed(tradeNo)
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "支付订单号不匹配"})
+		return
+	}
+	if paymentResp.Data.Amount > 0 && paymentResp.Data.Amount != formattedAmount {
+		_ = model.MarkOrderFailed(tradeNo)
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "支付金额不匹配"})
+		return
+	}
+	if err := model.UpdateCardOrderPaymentInfo(tradeNo, formattedAmount, currency, paymentResp.Data.FlowOrderNo); err != nil {
+		logger.LogError(c.Request.Context(), fmt.Sprintf("CardShop 保存支付订单信息失败 user_id=%d trade_no=%s error=%q", userID, tradeNo, err.Error()))
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "保存支付订单失败"})
 		return
 	}
 
@@ -239,4 +252,8 @@ func GetCardShopOrderDetail(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "success", "data": data})
+}
+
+func getCardShopPayMoney(productPrice int64) float64 {
+	return float64(productPrice)
 }

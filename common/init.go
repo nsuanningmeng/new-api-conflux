@@ -58,6 +58,7 @@ func InitEnv() {
 	}
 	if os.Getenv("CRYPTO_SECRET") != "" {
 		CryptoSecret = os.Getenv("CRYPTO_SECRET")
+		CryptoSecretExplicitlyConfigured = true
 	} else {
 		CryptoSecret = SessionSecret
 	}

@@ -26,6 +26,11 @@ type adminImportCardsRequest struct {
 	Cards []string `json:"cards"`
 }
 
+type adminManualDeliverRequest struct {
+	Force  bool   `json:"force"`
+	Reason string `json:"reason"`
+}
+
 func (req adminProductRequest) applyTo(product *model.Product) {
 	product.Name = strings.TrimSpace(req.Name)
 	product.Description = strings.TrimSpace(req.Description)
@@ -145,11 +150,12 @@ func AdminImportCards(c *gin.Context) {
 		return
 	}
 
-	if err := model.BatchCreateCards(productID, req.Cards); err != nil {
+	count, err := model.BatchCreateCards(productID, req.Cards)
+	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "导入卡密失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "success", "data": gin.H{"count": len(req.Cards)}})
+	c.JSON(http.StatusOK, gin.H{"message": "success", "data": gin.H{"count": count}})
 }
 
 func AdminGetAllCardOrders(c *gin.Context) {
@@ -178,14 +184,27 @@ func AdminManualDeliver(c *gin.Context) {
 		return
 	}
 
+	var req adminManualDeliverRequest
+	if c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
+			return
+		}
+	}
+	if order.Status == model.CardShopOrderPending && !req.Force {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "订单未支付，不能手动发卡"})
+		return
+	}
+
 	LockOrder(order.TradeNo)
 	defer UnlockOrder(order.TradeNo)
 
-	if err := model.ManualDeliverCardOrder(orderID); err != nil {
+	if err := model.ManualDeliverCardOrder(orderID, req.Force); err != nil {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": err.Error()})
 		return
 	}
 
-	logger.LogInfo(c.Request.Context(), fmt.Sprintf("管理员手动补发卡密 order_id=%d user_id=%d", orderID, order.UserID))
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf("管理员手动补发卡密 order_id=%d user_id=%d force=%t reason=%q", orderID, order.UserID, req.Force, strings.TrimSpace(req.Reason)))
+	model.RecordLog(order.UserID, model.LogTypeSystem, fmt.Sprintf("管理员手动发卡 order_id=%d force=%t reason=%s", orderID, req.Force, strings.TrimSpace(req.Reason)))
 	c.JSON(http.StatusOK, gin.H{"message": "success", "data": nil})
 }

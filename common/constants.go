@@ -72,8 +72,12 @@ var DefaultCollapseSidebar = false // default value of collapse sidebar
 
 // Any options with "Secret", "Token" in its key won't be return by GetOptions
 
+// SessionSecret may be generated at startup when SESSION_SECRET is not configured.
 var SessionSecret = uuid.New().String()
+// CryptoSecret encrypts durable secrets such as card shop card contents. Card shop
+// inventory requires an explicit CRYPTO_SECRET so encrypted cards survive restarts.
 var CryptoSecret = uuid.New().String()
+var CryptoSecretExplicitlyConfigured = false
 
 var OptionMap map[string]string
 var OptionMapRWMutex sync.RWMutex
