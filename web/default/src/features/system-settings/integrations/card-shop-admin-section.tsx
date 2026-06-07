@@ -29,9 +29,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SettingsSection } from '../components/settings-section'
-import { 
-  useAdminCardShopProducts, 
-  useAdminUpdateProduct, 
+import {
+  useAdminCardShopProducts,
+  useAdminCreateProduct,
+  useAdminUpdateProduct,
   useAdminDeleteProduct,
   useAdminImportCards,
   useAdminAllOrders
@@ -51,6 +52,7 @@ export function CardShopAdminSection() {
   const { data: productsData, isLoading: loadingProducts } = useAdminCardShopProducts()
   const { data: ordersData, isLoading: loadingOrders } = useAdminAllOrders(orderPage, DEFAULT_PAGE_SIZE, orderStatus)
   
+  const createProduct = useAdminCreateProduct()
   const updateProduct = useAdminUpdateProduct()
   const deleteProduct = useAdminDeleteProduct()
   const importCards = useAdminImportCards()
@@ -59,13 +61,18 @@ export function CardShopAdminSection() {
   const orders = ordersData?.data?.items || []
   const ordersTotal = ordersData?.data?.total || 0
 
-  const handleUpdateProduct = async (values: any) => {
+  const handleSaveProduct = async (values: any) => {
     try {
-      await updateProduct.mutateAsync(values)
-      toast.success(t('Product updated successfully'))
+      if (values.id) {
+        await updateProduct.mutateAsync({ id: values.id, product: values })
+        toast.success(t('Product updated successfully'))
+      } else {
+        await createProduct.mutateAsync(values)
+        toast.success(t('Product created successfully'))
+      }
       setEditingProduct(null)
     } catch (err: any) {
-      toast.error(err.message || t('Update failed'))
+      toast.error(err.message || t('Operation failed'))
     }
   }
 
@@ -82,7 +89,8 @@ export function CardShopAdminSection() {
   const handleImportCards = async (values: { cards: string }) => {
     if (!importingProduct) return
     try {
-      await importCards.mutateAsync({ productId: importingProduct.id, cards: values.cards })
+      const cardList = (values.cards as string).split('\n').map((s: string) => s.trim()).filter(Boolean)
+      await importCards.mutateAsync({ productId: importingProduct.id, cards: cardList })
       toast.success(t('Cards imported successfully'))
       setImportingProduct(null)
     } catch (err: any) {
@@ -199,12 +207,12 @@ export function CardShopAdminSection() {
       </Tabs>
 
       {/* Product Edit Dialog */}
-      <ProductDialog 
-        product={editingProduct} 
-        open={!!editingProduct} 
-        onClose={() => setEditingProduct(null)} 
-        onSave={handleUpdateProduct}
-        loading={updateProduct.isPending}
+      <ProductDialog
+        product={editingProduct}
+        open={!!editingProduct}
+        onClose={() => setEditingProduct(null)}
+        onSave={handleSaveProduct}
+        loading={createProduct.isPending || updateProduct.isPending}
       />
 
       {/* Import Cards Dialog */}

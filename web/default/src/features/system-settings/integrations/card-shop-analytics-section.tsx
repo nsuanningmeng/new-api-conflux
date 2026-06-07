@@ -63,7 +63,8 @@ export function CardShopAnalyticsSection() {
     queryKey: ['card-shop-analytics', period],
     queryFn: async () => {
       const res = await api.get(`/api/user/cardshop/admin/analytics?period=${period}`)
-      return res.data.data
+      if (res.data?.message !== 'success') throw new Error(res.data?.data || 'Failed to fetch analytics')
+      return res.data.data as AnalyticsData
     },
     refetchInterval: 30000,
   })
