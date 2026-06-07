@@ -4533,6 +4533,22 @@
     "Products": "商品管理",
     "All Orders": "全部订单",
     "New Product": "新建商品",
-    "No products available at the moment": "暂无商品可用"
+    "No products available at the moment": "暂无商品可用",
+    "Card Shop Analytics": "发卡运营看板",
+    "Revenue Trend": "收入趋势",
+    "Revenue": "收入",
+    "orders": "单",
+    "Avg Order": "均价",
+    "Daily": "今日",
+    "Weekly": "本周",
+    "Monthly": "本月",
+    "SEO Settings": "SEO 设置",
+    "SEO Title": "SEO 标题",
+    "SEO Description": "SEO 描述",
+    "SEO Keywords": "SEO 关键词",
+    "Used as the browser tab title and search result heading": "作为浏览器标签页标题和搜索结果标题",
+    "Brief description shown in search engine results (max 160 chars)": "搜索引擎结果中显示的简短描述（最多160字符）",
+    "Comma-separated keywords for search engines": "逗号分隔的搜索引擎关键词",
+    "Saved": "已保存"
   }
 }

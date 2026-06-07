@@ -69,6 +69,9 @@ export type SiteSettings = {
   'legal.privacy_policy': string
   HeaderNavModules: string
   SidebarModulesAdmin: string
+  'seo_setting.title': string
+  'seo_setting.description': string
+  'seo_setting.keywords': string
 }
 
 export type AuthSettings = {
@@ -183,7 +186,11 @@ export type ModelSettings = {
   'model_deployment.ionet.enabled': boolean
 }
 
-export type CardShopSettingsValues = {`n  CardShopEnabled?: boolean`n}`n`nexport type BillingSettings = {
+export type CardShopSettingsValues = {
+  CardShopEnabled?: boolean
+}
+
+export type BillingSettings = {
   QuotaForNewUser: number
   PreConsumedQuota: number
   QuotaForInviter: number

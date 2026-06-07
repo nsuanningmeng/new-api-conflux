@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { SeoSettingsSection } from './seo-settings-section'
 import { SystemInfoSection } from '../general/system-info-section'
 import {
   parseHeaderNavModules,
@@ -50,6 +51,20 @@ const SITE_SECTIONS = [
             user_agreement: settings['legal.user_agreement'],
             privacy_policy: settings['legal.privacy_policy'],
           },
+        }}
+      />
+    ),
+  },
+  {
+    id: 'seo',
+    titleKey: 'SEO Settings',
+    descriptionKey: 'Configure website SEO title, description and keywords',
+    build: (settings: SiteSettings) => (
+      <SeoSettingsSection
+        defaultValues={{
+          'seo_setting.title': settings['seo_setting.title'] ?? '',
+          'seo_setting.description': settings['seo_setting.description'] ?? '',
+          'seo_setting.keywords': settings['seo_setting.keywords'] ?? '',
         }}
       />
     ),

@@ -4533,6 +4533,22 @@
     "Products": "Products",
     "All Orders": "All Orders",
     "New Product": "New Product",
-    "No products available at the moment": "No products available at the moment"
+    "No products available at the moment": "No products available at the moment",
+    "Card Shop Analytics": "Card Shop Analytics",
+    "Revenue Trend": "Revenue Trend",
+    "Revenue": "Revenue",
+    "orders": "orders",
+    "Avg Order": "Avg Order",
+    "Daily": "Daily",
+    "Weekly": "Weekly",
+    "Monthly": "Monthly",
+    "SEO Settings": "SEO Settings",
+    "SEO Title": "SEO Title",
+    "SEO Description": "SEO Description",
+    "SEO Keywords": "SEO Keywords",
+    "Used as the browser tab title and search result heading": "Used as the browser tab title and search result heading",
+    "Brief description shown in search engine results (max 160 chars)": "Brief description shown in search engine results (max 160 chars)",
+    "Comma-separated keywords for search engines": "Comma-separated keywords for search engines",
+    "Saved": "Saved"
   }
 }

@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { parseCurrencyDisplayType } from '@/lib/currency'
 import { CardShopAdminSection } from '../integrations/card-shop-admin-section'
+import { CardShopAnalyticsSection } from '../integrations/card-shop-analytics-section'
 import { CheckinSettingsSection } from '../general/checkin-settings-section'
 import { PricingSection } from '../general/pricing-section'
 import { QuotaSettingsSection } from '../general/quota-settings-section'
@@ -221,6 +222,14 @@ const BILLING_SECTIONS = [
     descriptionKey: 'Manage card shop products and inventory',
     build: (_settings: BillingSettings) => (
       <CardShopAdminSection />
+    ),
+  },
+  {
+    id: 'card-shop-analytics',
+    titleKey: 'Card Shop Analytics',
+    descriptionKey: 'View card shop revenue and order analytics',
+    build: (_settings: BillingSettings) => (
+      <CardShopAnalyticsSection />
     ),
   },
   {

@@ -142,6 +142,8 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.GET("/cardshop/products", controller.AdminGetAllProducts)
 				adminRoute.GET("/cardshop/admin/orders", controller.AdminGetAllCardOrders)
 				adminRoute.POST("/cardshop/admin/order/:id/deliver", controller.AdminManualDeliver)
+				adminRoute.GET("/cardshop/admin/analytics", controller.AdminGetCardShopAnalytics)
+				adminRoute.GET("/cardshop/admin/trend", controller.AdminGetCardShopDailyTrend)
 				adminRoute.GET("/search", controller.SearchUsers)
 				adminRoute.GET("/:id/oauth/bindings", controller.GetUserOAuthBindingsByAdmin)
 				adminRoute.DELETE("/:id/oauth/bindings/:provider_id", controller.UnbindCustomOAuthByAdmin)
