@@ -155,7 +155,7 @@ docker run --name new-api -d --restart always \
 docker pull ghcr.io/nsuanningmeng/new-api-conflux:latest
 
 # Or a specific version
-docker pull ghcr.io/nsuanningmeng/new-api-conflux:v0.1.1
+docker pull ghcr.io/nsuanningmeng/new-api-conflux:0.1.2
 
 # Run with SQLite (default)
 docker run --name new-api -d --restart always \
