@@ -120,6 +120,10 @@ const rootElement = document.getElementById('root')!
       ) as HTMLMetaElement | null
       if (metaTitle) metaTitle.setAttribute('content', name)
     }
+    const applyMeta = (name: string, content: string) => {
+      const el = document.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null
+      if (el && content) el.setAttribute('content', content)
+    }
     // Cache-first
     try {
       const saved = localStorage.getItem('status')
@@ -127,6 +131,13 @@ const rootElement = document.getElementById('root')!
         const s = JSON.parse(saved)
         if (s?.system_name) apply(s.system_name)
         if (s?.logo) applyFaviconToDom(s.logo)
+      }
+      const seo = localStorage.getItem('seo_settings')
+      if (seo) {
+        const o = JSON.parse(seo)
+        if (o?.title) apply(o.title)
+        if (o?.description) applyMeta('description', o.description)
+        if (o?.keywords) applyMeta('keywords', o.keywords)
       }
     } catch {
       /* empty */

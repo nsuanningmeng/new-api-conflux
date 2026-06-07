@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 
@@ -137,7 +136,7 @@ func AdminGetCardShopDailyTrend(c *gin.Context) {
 
 	breakdown, err := model.GetCardShopRevenueBreakdown(startTime, now, period)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": fmt.Sprintf("获取趋势失败: %s", err.Error())})
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取趋势失败"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "success", "data": breakdown})

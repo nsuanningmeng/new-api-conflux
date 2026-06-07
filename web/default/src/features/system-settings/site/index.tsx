@@ -36,6 +36,9 @@ const defaultSiteSettings: SiteSettings = {
   'legal.privacy_policy': '',
   HeaderNavModules: '',
   SidebarModulesAdmin: '',
+  'seo_setting.title': '',
+  'seo_setting.description': '',
+  'seo_setting.keywords': '',
 }
 
 export function SiteSettings() {

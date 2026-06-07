@@ -58,6 +58,25 @@ export function SeoSettingsSection({
     [updateOption],
   )
 
+  // Persist SEO settings to localStorage and apply to DOM
+  useEffect(() => {
+    try {
+      const seo = {
+        title: title || defaultValues['seo_setting.title'] || '',
+        description: description || defaultValues['seo_setting.description'] || '',
+        keywords: keywords || defaultValues['seo_setting.keywords'] || '',
+      }
+      localStorage.setItem('seo_settings', JSON.stringify(seo))
+    } catch {
+      /* empty */
+    }
+    if (title) document.title = title
+    const metaDesc = document.querySelector('meta[name="description"]') as HTMLMetaElement | null
+    if (metaDesc && description) metaDesc.setAttribute('content', description)
+    const metaKw = document.querySelector('meta[name="keywords"]') as HTMLMetaElement | null
+    if (metaKw && keywords) metaKw.setAttribute('content', keywords)
+  }, [title, description, keywords, defaultValues])
+
   return (
     <div className="space-y-4">
       {saved && (

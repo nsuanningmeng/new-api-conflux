@@ -121,7 +121,7 @@ export function CardShopAnalyticsSection() {
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
             }`}
           >
-            {p === 'daily' ? t('Daily') : p === 'weekly' ? t('Weekly') : t('Monthly')}
+            {p === 'daily' ? t('Card Shop Daily') : p === 'weekly' ? t('Card Shop Weekly') : t('Card Shop Monthly')}
           </button>
         ))}
       </div>
@@ -131,14 +131,14 @@ export function CardShopAnalyticsSection() {
         <StatCard
           label={t('Card Shop Analytics')}
           value={data ? `${data.total_orders}` : '0'}
-          suffix={t('orders')}
+          suffix={t('Card Shop Orders')}
         />
         <StatCard
           label={t('Delivered')}
           value={data ? `${data.delivered_orders}` : '0'}
         />
         <StatCard
-          label={t('Revenue')}
+          label={t('Card Shop Revenue')}
           value={data ? (data.total_revenue / 100).toFixed(2) : '0.00'}
         />
         <StatCard

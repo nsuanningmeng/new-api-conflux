@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/QuantumNous/new-api/common"
-	"gorm.io/gorm"
 )
 
 type CardShopAnalyticsResult struct {
@@ -130,6 +129,3 @@ func cardShopRevenueMonthExpr() string {
 	}
 	return "strftime('%Y-%m', datetime(create_time, 'unixepoch'))"
 }
-
-// ensure imports stay
-var _ = gorm.Expr
