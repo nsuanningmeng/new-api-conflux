@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -30,9 +31,13 @@ var (
 	ErrCardShopPaymentMismatch = errors.New("支付信息与订单不匹配")
 	ErrCardShopNoStock         = errors.New("商品库存不足")
 	ErrCardShopOrderStatus     = errors.New("订单状态不允许发卡")
+	// ErrCardShopCryptoSecretRequired 在未显式配置 CRYPTO_SECRET 时拒绝写入卡密，
+	// 避免使用启动随机密钥加密导致重启后卡密永久不可解密。
+	ErrCardShopCryptoSecretRequired = errors.New("未配置 CRYPTO_SECRET 环境变量，禁止导入卡密：请先设置稳定的 CRYPTO_SECRET 并重启，否则重启后已导入卡密将无法解密")
 )
 
 const cardShopOrderTTLSeconds int64 = 30 * 60
+
 var cardShopProductLocks sync.Map
 
 type Product struct {
@@ -74,6 +79,40 @@ type CardOrder struct {
 	ProductName    string  `json:"product_name" gorm:"type:varchar(255);default:''"`
 	CreateTime     int64   `json:"create_time"`
 	CompleteTime   int64   `json:"complete_time"`
+}
+
+// 卡商城三张表使用显式带前缀的表名，避免与上游/运营自定义表潜在冲突。
+func (Product) TableName() string   { return "card_shop_products" }
+func (Card) TableName() string      { return "card_shop_cards" }
+func (CardOrder) TableName() string { return "card_shop_orders" }
+
+// renameCardShopLegacyTables 将早期版本使用的通用表名（products/cards/card_orders）
+// 重命名为带 card_shop_ 前缀的新表名。幂等且对全新安装安全：仅当旧表存在且新表不存在时
+// 才重命名；使用 GORM Migrator().RenameTable 抽象，兼容 SQLite / MySQL / PostgreSQL。
+// 必须在 AutoMigrate 之前调用，以保留存量数据。
+func renameCardShopLegacyTables() error {
+	legacyTables := []struct {
+		oldName string
+		newName string
+	}{
+		{"products", "card_shop_products"},
+		{"cards", "card_shop_cards"},
+		{"card_orders", "card_shop_orders"},
+	}
+	migrator := DB.Migrator()
+	for _, tbl := range legacyTables {
+		if migrator.HasTable(tbl.newName) {
+			continue // 新表已存在（全新安装或已迁移），跳过
+		}
+		if !migrator.HasTable(tbl.oldName) {
+			continue // 旧表不存在（全新安装），跳过
+		}
+		if err := migrator.RenameTable(tbl.oldName, tbl.newName); err != nil {
+			return fmt.Errorf("rename card shop table %s -> %s: %w", tbl.oldName, tbl.newName, err)
+		}
+		common.SysLog(fmt.Sprintf("card shop: renamed legacy table %s to %s", tbl.oldName, tbl.newName))
+	}
+	return nil
 }
 
 func cardShopForUpdate(tx *gorm.DB) *gorm.DB {
@@ -180,6 +219,11 @@ func GetAllProducts() ([]*Product, error) {
 }
 
 func BatchCreateCards(productID int64, cards []string) (int, error) {
+	// B1: 写入卡密前强制要求显式配置 CRYPTO_SECRET，堵住「首次空卡表导入」绕过启动检查、
+	// 用启动随机密钥加密导致重启后不可解密的数据丢失缺口。
+	if !common.CryptoSecretExplicitlyConfigured {
+		return 0, ErrCardShopCryptoSecretRequired
+	}
 	if productID <= 0 {
 		return 0, errors.New("商品ID不能为空")
 	}
@@ -391,7 +435,8 @@ func EnsureCardShopCryptoSecretConfigured() error {
 		return err
 	}
 	if count > 0 {
-		return errors.New("CRYPTO_SECRET must be explicitly configured when card shop cards exist")
+		return errors.New("检测到已存在卡商城卡密，但未显式配置 CRYPTO_SECRET：请设置稳定的 CRYPTO_SECRET 环境变量后重启。" +
+			"若此前依赖 SESSION_SECRET 加密过卡密，CRYPTO_SECRET 必须设置为与当时相同的值，否则旧卡密将无法解密")
 	}
 	return nil
 }

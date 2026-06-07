@@ -254,6 +254,11 @@ func migrateDB() error {
 	if err := migrateTokenModelLimitsToText(); err != nil {
 		return err
 	}
+	// 卡商城旧表名（products/cards/card_orders）重命名为带前缀的新表名，
+	// 必须在 AutoMigrate 之前执行，保证存量数据被保留迁移。
+	if err := renameCardShopLegacyTables(); err != nil {
+		return err
+	}
 
 	err := DB.AutoMigrate(
 		&Channel{},
@@ -305,6 +310,10 @@ func migrateDB() error {
 }
 
 func migrateDBFast() error {
+	// 卡商城旧表名重命名，必须在并行 AutoMigrate 之前完成。
+	if err := renameCardShopLegacyTables(); err != nil {
+		return err
+	}
 
 	var wg sync.WaitGroup
 

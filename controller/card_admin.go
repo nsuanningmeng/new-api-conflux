@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -12,14 +13,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// adminProductRequest 的可选标量字段统一使用指针类型（遵循 Rule 6）：
+// nil 表示客户端未提交该字段、应保留既有值；非 nil 才覆盖。
+// 这样 partial PUT（仅提交部分字段）不会把未提交字段静默清空。
 type adminProductRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Price       int64  `json:"price"`
-	ImageURL    string `json:"image_url"`
-	Enabled     *bool  `json:"enabled"`
-	Stock       int    `json:"stock"`
-	SortOrder   int    `json:"sort_order"`
+	Name        *string `json:"name"`
+	Description *string `json:"description"`
+	Price       *int64  `json:"price"`
+	ImageURL    *string `json:"image_url"`
+	Enabled     *bool   `json:"enabled"`
+	Stock       *int    `json:"stock"`
+	SortOrder   *int    `json:"sort_order"`
 }
 
 type adminImportCardsRequest struct {
@@ -32,12 +36,24 @@ type adminManualDeliverRequest struct {
 }
 
 func (req adminProductRequest) applyTo(product *model.Product) {
-	product.Name = strings.TrimSpace(req.Name)
-	product.Description = strings.TrimSpace(req.Description)
-	product.Price = req.Price
-	product.ImageURL = strings.TrimSpace(req.ImageURL)
-	product.Stock = req.Stock
-	product.SortOrder = req.SortOrder
+	if req.Name != nil {
+		product.Name = strings.TrimSpace(*req.Name)
+	}
+	if req.Description != nil {
+		product.Description = strings.TrimSpace(*req.Description)
+	}
+	if req.Price != nil {
+		product.Price = *req.Price
+	}
+	if req.ImageURL != nil {
+		product.ImageURL = strings.TrimSpace(*req.ImageURL)
+	}
+	if req.Stock != nil {
+		product.Stock = *req.Stock
+	}
+	if req.SortOrder != nil {
+		product.SortOrder = *req.SortOrder
+	}
 	if req.Enabled != nil {
 		product.Enabled = *req.Enabled
 	}
@@ -152,6 +168,11 @@ func AdminImportCards(c *gin.Context) {
 
 	count, err := model.BatchCreateCards(productID, req.Cards)
 	if err != nil {
+		// B1: 未配置 CRYPTO_SECRET 时向管理员明确报错，而非笼统的「导入失败」。
+		if errors.Is(err, model.ErrCardShopCryptoSecretRequired) {
+			c.JSON(http.StatusOK, gin.H{"message": "error", "data": err.Error()})
+			return
+		}
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "导入卡密失败"})
 		return
 	}

@@ -332,7 +332,7 @@ docker run --name new-api -d --restart always \
 | Variable Name | Description | Default Value |
 |--------|------|--------|
 | `SESSION_SECRET` | Session secret (required for multi-machine deployment) | - |
-| `CRYPTO_SECRET` | Encryption secret (required for Redis) | - |
+| `CRYPTO_SECRET` | Encryption secret (required for Redis; **required & must be stable for Card Shop** — otherwise imported cards cannot be decrypted after restart) | - |
 | `SQL_DSN` | Database connection string | - |
 | `REDIS_CONN_STRING` | Redis connection string | - |
 | `STREAMING_TIMEOUT` | Streaming timeout (seconds) | `300` |
@@ -415,6 +415,7 @@ docker run --name new-api -d --restart always \
 > [!WARNING]
 > - **Must set** `SESSION_SECRET` - Otherwise login status inconsistent
 > - **Shared Redis must set** `CRYPTO_SECRET` - Otherwise data cannot be decrypted
+> - **Card Shop must set a stable** `CRYPTO_SECRET` **before importing cards** - Imported card secrets are AES-encrypted with this key; if it is unset (falls back to an ephemeral key) or later changed, previously imported cards become permanently undecryptable. The server refuses card import until `CRYPTO_SECRET` is explicitly configured.
 
 ### 🔄 Channel Retry and Cache
 

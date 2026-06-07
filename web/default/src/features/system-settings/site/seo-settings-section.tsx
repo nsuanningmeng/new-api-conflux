@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useUpdateOption } from '../hooks/use-update-option'
 
@@ -39,16 +39,34 @@ export function SeoSettingsSection({
   const [keywords, setKeywords] = useState(defaultValues['seo_setting.keywords'] ?? '')
   const [saved, setSaved] = useState(false)
 
+  // C2: 记录每个字段最近一次已持久化的值，onBlur 时若未变化则跳过保存，
+  // 避免无编辑的失焦反复写入、以及把未改动的值重复落库。
+  const savedValuesRef = useRef<Record<string, string>>({
+    'seo_setting.title': defaultValues['seo_setting.title'] ?? '',
+    'seo_setting.description': defaultValues['seo_setting.description'] ?? '',
+    'seo_setting.keywords': defaultValues['seo_setting.keywords'] ?? '',
+  })
+
   useEffect(() => {
     setTitle(defaultValues['seo_setting.title'] ?? '')
     setDescription(defaultValues['seo_setting.description'] ?? '')
     setKeywords(defaultValues['seo_setting.keywords'] ?? '')
+    savedValuesRef.current = {
+      'seo_setting.title': defaultValues['seo_setting.title'] ?? '',
+      'seo_setting.description': defaultValues['seo_setting.description'] ?? '',
+      'seo_setting.keywords': defaultValues['seo_setting.keywords'] ?? '',
+    }
   }, [defaultValues])
 
   const saveField = useCallback(
     async (key: string, value: string) => {
+      // 值未发生实际变化则不提交，避免静默覆盖与冗余写入。
+      if (savedValuesRef.current[key] === value) {
+        return
+      }
       try {
         await updateOption.mutateAsync({ key, value })
+        savedValuesRef.current[key] = value
         setSaved(true)
         setTimeout(() => setSaved(false), 2000)
       } catch {

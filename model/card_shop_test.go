@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/stretchr/testify/require"
 	"github.com/glebarez/sqlite"
+	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
 
@@ -169,4 +169,50 @@ func TestCardShopEncryptionRoundTrip(t *testing.T) {
 	decrypted, err := common.AESDecrypt(encrypted)
 	require.NoError(t, err)
 	require.Equal(t, "secret-card-content", decrypted)
+}
+
+func TestCardShopImportRequiresExplicitCryptoSecret(t *testing.T) {
+	setupCardShopTestDB(t)
+	// 模拟未显式配置 CRYPTO_SECRET 的部署：首次导入卡密必须被拒绝，
+	// 避免用启动随机密钥加密导致重启后不可解密（B1 缺口回归测试）。
+	common.CryptoSecretExplicitlyConfigured = false
+	product := &Product{Name: "test product", Price: 10, Enabled: true}
+	require.NoError(t, CreateProduct(product))
+
+	_, err := BatchCreateCards(product.ID, []string{"card-a"})
+	require.ErrorIs(t, err, ErrCardShopCryptoSecretRequired)
+
+	var count int64
+	require.NoError(t, DB.Model(&Card{}).Count(&count).Error)
+	require.Equal(t, int64(0), count)
+}
+
+func TestCardShopLegacyTableRenameMigratesData(t *testing.T) {
+	oldDB := DB
+	oldSQLite := common.UsingSQLite
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+	require.NoError(t, err)
+	DB = db
+	common.UsingSQLite = true
+	t.Cleanup(func() {
+		DB = oldDB
+		common.UsingSQLite = oldSQLite
+	})
+
+	// 模拟旧版本遗留的通用表名 + 数据
+	require.NoError(t, DB.Exec("CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT)").Error)
+	require.NoError(t, DB.Exec("INSERT INTO products (id, name) VALUES (1, 'legacy-product')").Error)
+
+	// 重命名迁移：旧表改名为新前缀表，数据保留
+	require.NoError(t, renameCardShopLegacyTables())
+	require.True(t, DB.Migrator().HasTable("card_shop_products"))
+	require.False(t, DB.Migrator().HasTable("products"))
+
+	var name string
+	require.NoError(t, DB.Raw("SELECT name FROM card_shop_products WHERE id = 1").Scan(&name).Error)
+	require.Equal(t, "legacy-product", name)
+
+	// 幂等：再次执行不应报错或改动数据
+	require.NoError(t, renameCardShopLegacyTables())
+	require.True(t, DB.Migrator().HasTable("card_shop_products"))
 }
