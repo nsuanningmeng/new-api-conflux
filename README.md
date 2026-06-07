@@ -148,6 +148,25 @@ docker run --name new-api -d --restart always \
 
 </details>
 
+### Using GHCR Container Image
+
+```bash
+# Pull from GitHub Container Registry
+docker pull ghcr.io/nsuanningmeng/new-api-conflux:latest
+
+# Or a specific version
+docker pull ghcr.io/nsuanningmeng/new-api-conflux:v0.1.1
+
+# Run with SQLite (default)
+docker run --name new-api -d --restart always \
+  -p 3000:3000 \
+  -e TZ=Asia/Shanghai \
+  -v ./data:/data \
+  ghcr.io/nsuanningmeng/new-api-conflux:latest
+```
+
+> Supports `linux/amd64` and `linux/arm64`.
+
 ---
 
 🎉 After deployment is complete, visit `http://localhost:3000` to start using!
