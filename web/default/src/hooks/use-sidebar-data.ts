@@ -33,7 +33,6 @@ import {
   CreditCard,
   ListTodo,
   Settings,
-  ShoppingCart,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { WORKSPACE_IDS } from '@/components/layout/lib/workspace-registry'
@@ -109,16 +108,6 @@ export function useSidebarData(): SidebarData {
             title: t('Wallet'),
             url: '/wallet',
             icon: Wallet,
-          },
-          {
-            title: t('AI Account Shop'),
-            url: '/card-shop',
-            icon: ShoppingCart,
-          },
-          {
-            title: t('My Orders'),
-            url: '/card-shop/orders',
-            icon: ListTodo,
           },
           {
             title: t('Profile'),

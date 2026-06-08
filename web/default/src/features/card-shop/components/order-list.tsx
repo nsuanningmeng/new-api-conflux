@@ -18,12 +18,12 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from 'react-i18next'
 import { format } from 'date-fns'
-import { EyeIcon } from 'lucide-react'
+import { EyeIcon, InboxIcon } from 'lucide-react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatLocalCurrencyAmount } from '@/lib/currency'
-import { getOrderStatusLabel, getOrderStatusColor } from '../lib'
+import { getOrderStatusLabel, getOrderStatusBadgeClass } from '../lib'
 import type { CardShopOrder } from '../types'
 
 interface OrderListProps {
@@ -32,12 +32,13 @@ interface OrderListProps {
   isAdmin?: boolean
 }
 
-export function OrderList({ orders, onViewDetails, isAdmin }: OrderListProps) {
+export function OrderList({ orders, onViewDetails }: OrderListProps) {
   const { t } = useTranslation()
 
   if (orders.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+      <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed bg-muted/30 py-16 text-muted-foreground">
+        <InboxIcon className="size-10 text-muted-foreground/50" />
         <p>{t('No orders found')}</p>
       </div>
     )
@@ -63,7 +64,7 @@ export function OrderList({ orders, onViewDetails, isAdmin }: OrderListProps) {
               <TableCell>{order.product_name}</TableCell>
               <TableCell>{formatLocalCurrencyAmount(order.money)}</TableCell>
               <TableCell>
-                <Badge variant={getOrderStatusColor(order.status) as any}>
+                <Badge className={getOrderStatusBadgeClass(order.status)}>
                   {getOrderStatusLabel(order.status)}
                 </Badge>
               </TableCell>

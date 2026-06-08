@@ -45,19 +45,19 @@ export function getOrderStatusLabel(status: string): string {
 }
 
 /**
- * Get order status color
+ * Get order status badge class (color-coded, matches Badge component conventions)
  */
-export function getOrderStatusColor(status: string): string {
+export function getOrderStatusBadgeClass(status: string): string {
   switch (status) {
     case 'pending':
-      return 'warning'
+      return 'border-transparent bg-amber-500/15 text-amber-600 dark:text-amber-400'
     case 'paid':
-      return 'secondary'
+      return 'border-transparent bg-sky-500/15 text-sky-600 dark:text-sky-400'
     case 'delivered':
-      return 'success'
+      return 'border-transparent bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
     case 'cancelled':
-      return 'destructive'
+      return 'border-transparent bg-destructive/15 text-destructive'
     default:
-      return 'default'
+      return ''
   }
 }

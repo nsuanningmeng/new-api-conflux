@@ -26,6 +26,7 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { defaultTopNavLinks } from '../config/top-nav.config'
 import { type TopNavLink } from '../types'
+import { AiAccountCta } from './ai-account-cta'
 import { Header } from './header'
 import { SystemBrand } from './system-brand'
 import { TopNav } from './top-nav'
@@ -121,6 +122,7 @@ export function AppHeader({
 
         {rightContent ?? (
           <div className='ms-auto flex items-center gap-1 sm:gap-2'>
+            <AiAccountCta />
             {showTopNav && (
               <div className='me-1 hidden lg:block'>
                 <TopNav links={links} />

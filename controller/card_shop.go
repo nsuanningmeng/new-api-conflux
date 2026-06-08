@@ -2,7 +2,6 @@ package controller
 
 import (
 	"fmt"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -22,70 +21,69 @@ type createCardShopOrderRequest struct {
 func GetCardShopProducts(c *gin.Context) {
 	products, err := model.GetAllEnabledProducts()
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取商品列表失败"})
+		common.ApiErrorMsg(c, "获取商品列表失败")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "success", "data": products})
+	common.ApiSuccess(c, products)
 }
 
 func GetCardShopProduct(c *gin.Context) {
 	productID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || productID <= 0 {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "无效的商品ID"})
+		common.ApiErrorMsg(c, "无效的商品ID")
 		return
 	}
 	product, err := model.GetProductByID(productID)
 	if err != nil || product == nil || !product.Enabled {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "商品不存在"})
+		common.ApiErrorMsg(c, "商品不存在")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "success", "data": product})
+	common.ApiSuccess(c, product)
 }
 
 func CreateCardShopOrder(c *gin.Context) {
-	if !setting.ConfluxAPIEnabled {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "Conflux 支付未启用"})
-		return
-	}
-	if !isConfluxAPITopUpEnabled() {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "Conflux 配置不完整"})
+	// 支付通道可用性合并为一次校验：对用户给出友好提示，详细原因仅写入日志。
+	topupReady := isConfluxAPITopUpEnabled()
+	if !setting.ConfluxAPIEnabled || !topupReady {
+		logger.LogWarn(c.Request.Context(), fmt.Sprintf("CardShop 支付不可用 conflux_enabled=%t topup_ready=%t", setting.ConfluxAPIEnabled, topupReady))
+		common.ApiErrorMsg(c, "AI 账号支付暂未开放，请联系管理员")
 		return
 	}
 
 	var req createCardShopOrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.ProductID <= 0 {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
+		common.ApiErrorMsg(c, "参数错误")
 		return
 	}
 
 	product, err := model.GetProductByID(req.ProductID)
 	if err != nil || product == nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "商品不存在"})
+		common.ApiErrorMsg(c, "商品不存在")
 		return
 	}
 	if !product.Enabled {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "商品已下架"})
+		common.ApiErrorMsg(c, "商品已下架")
 		return
 	}
 	if product.Stock <= 0 {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "商品库存不足"})
+		common.ApiErrorMsg(c, "商品库存不足")
 		return
 	}
 	if product.Price <= 0 {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "商品价格无效"})
+		common.ApiErrorMsg(c, "商品价格无效")
 		return
 	}
 
 	userID := c.GetInt("id")
 	user, err := model.GetUserById(userID, false)
 	if err != nil || user == nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "用户不存在"})
+		common.ApiErrorMsg(c, "用户不存在")
 		return
 	}
 
 	payMoney := getCardShopPayMoney(product.Price)
 	if payMoney < 0.01 {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "支付金额过低"})
+		common.ApiErrorMsg(c, "支付金额过低")
 		return
 	}
 
@@ -106,7 +104,7 @@ func CreateCardShopOrder(c *gin.Context) {
 	}
 	if err := model.CreateReservedCardOrder(order); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("CardShop 创建订单失败 user_id=%d product_id=%d trade_no=%s error=%q", userID, product.ID, tradeNo, err.Error()))
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "创建订单失败"})
+		common.ApiErrorMsg(c, "创建订单失败")
 		return
 	}
 
@@ -114,7 +112,7 @@ func CreateCardShopOrder(c *gin.Context) {
 	if err != nil {
 		logger.LogWarn(c.Request.Context(), fmt.Sprintf("CardShop ConfluxAPI 异步通知地址未配置 user_id=%d trade_no=%s error=%q", userID, tradeNo, err.Error()))
 		_ = model.MarkOrderFailed(tradeNo)
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "异步通知地址未配置"})
+		common.ApiErrorMsg(c, "异步通知地址未配置")
 		return
 	}
 
@@ -162,52 +160,49 @@ func CreateCardShopOrder(c *gin.Context) {
 	if err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("CardShop ConfluxAPI 创建支付订单失败 user_id=%d trade_no=%s error=%q", userID, tradeNo, err.Error()))
 		_ = model.MarkOrderFailed(tradeNo)
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "拉起支付失败"})
+		common.ApiErrorMsg(c, "拉起支付失败")
 		return
 	}
 
 	if !paymentResp.Success || paymentResp.Code != "0000" {
 		logger.LogWarn(c.Request.Context(), fmt.Sprintf("CardShop ConfluxAPI 创建支付订单业务失败 user_id=%d trade_no=%s code=%s message=%q", userID, tradeNo, paymentResp.Code, paymentResp.Message))
 		_ = model.MarkOrderFailed(tradeNo)
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": firstNonEmpty(paymentResp.Message, "拉起支付失败")})
+		common.ApiErrorMsg(c, firstNonEmpty(paymentResp.Message, "拉起支付失败"))
 		return
 	}
 
 	if strings.EqualFold(paymentResp.Data.TradeStatus, "FAILED") {
 		_ = model.MarkOrderFailed(tradeNo)
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": firstNonEmpty(paymentResp.Data.FailReason, "拉起支付失败")})
+		common.ApiErrorMsg(c, firstNonEmpty(paymentResp.Data.FailReason, "拉起支付失败"))
 		return
 	}
 
 	if strings.TrimSpace(paymentResp.Data.MchOrderNo) != "" && paymentResp.Data.MchOrderNo != tradeNo {
 		_ = model.MarkOrderFailed(tradeNo)
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "支付订单号不匹配"})
+		common.ApiErrorMsg(c, "支付订单号不匹配")
 		return
 	}
 	if paymentResp.Data.Amount > 0 && paymentResp.Data.Amount != formattedAmount {
 		_ = model.MarkOrderFailed(tradeNo)
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "支付金额不匹配"})
+		common.ApiErrorMsg(c, "支付金额不匹配")
 		return
 	}
 	if err := model.UpdateCardOrderPaymentInfo(tradeNo, formattedAmount, currency, paymentResp.Data.FlowOrderNo); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("CardShop 保存支付订单信息失败 user_id=%d trade_no=%s error=%q", userID, tradeNo, err.Error()))
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "保存支付订单失败"})
+		common.ApiErrorMsg(c, "保存支付订单失败")
 		return
 	}
 
 	paymentURL := firstNonEmpty(paymentResp.Data.CheckoutURL, paymentResp.Data.PaymentURL, paymentResp.Data.NextAction.URL, paymentResp.Data.NextAction.QRCode)
 	logger.LogInfo(c.Request.Context(), fmt.Sprintf("CardShop ConfluxAPI 收银台创建成功 user_id=%d product_id=%d trade_no=%s flow_order_no=%s amount=%d money=%.2f", userID, product.ID, tradeNo, paymentResp.Data.FlowOrderNo, product.Price, payMoney))
-	c.JSON(http.StatusOK, gin.H{
-		"message": "success",
-		"data": gin.H{
-			"payment_url":   paymentURL,
-			"action_type":   paymentResp.Data.NextAction.Type,
-			"qr_code":       paymentResp.Data.NextAction.QRCode,
-			"checkout_url":  firstNonEmpty(paymentResp.Data.CheckoutURL, paymentResp.Data.NextAction.URL),
-			"flow_order_no": paymentResp.Data.FlowOrderNo,
-			"trade_no":      tradeNo,
-			"order_id":      order.ID,
-		},
+	common.ApiSuccess(c, gin.H{
+		"payment_url":   paymentURL,
+		"action_type":   paymentResp.Data.NextAction.Type,
+		"qr_code":       paymentResp.Data.NextAction.QRCode,
+		"checkout_url":  firstNonEmpty(paymentResp.Data.CheckoutURL, paymentResp.Data.NextAction.URL),
+		"flow_order_no": paymentResp.Data.FlowOrderNo,
+		"trade_no":      tradeNo,
+		"order_id":      order.ID,
 	})
 }
 
@@ -216,24 +211,24 @@ func GetCardShopOrders(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	orders, total, err := model.GetCardOrdersByUserID(userID, pageInfo)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取订单列表失败"})
+		common.ApiErrorMsg(c, "获取订单列表失败")
 		return
 	}
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(orders)
-	c.JSON(http.StatusOK, gin.H{"message": "success", "data": pageInfo})
+	common.ApiSuccess(c, pageInfo)
 }
 
 func GetCardShopOrderDetail(c *gin.Context) {
 	orderID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || orderID <= 0 {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "无效的订单ID"})
+		common.ApiErrorMsg(c, "无效的订单ID")
 		return
 	}
 
 	order, err := model.GetCardOrderByID(orderID)
 	if err != nil || order == nil || order.UserID != c.GetInt("id") {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "订单不存在"})
+		common.ApiErrorMsg(c, "订单不存在")
 		return
 	}
 
@@ -241,7 +236,7 @@ func GetCardShopOrderDetail(c *gin.Context) {
 	if order.Status == model.CardShopOrderDelivered && order.CardID > 0 {
 		card, err := model.GetCardByID(order.CardID)
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{"message": "error", "data": "卡密解密失败"})
+			common.ApiErrorMsg(c, "卡密解密失败")
 			return
 		}
 		data["card"] = gin.H{
@@ -251,7 +246,7 @@ func GetCardShopOrderDetail(c *gin.Context) {
 			"status":       card.Status,
 		}
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "success", "data": data})
+	common.ApiSuccess(c, data)
 }
 
 func getCardShopPayMoney(productPrice int64) float64 {
