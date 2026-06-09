@@ -1,5 +1,16 @@
 {
   "translation": {
+    "Contact Us": "Contact Us",
+    "Terms of Service": "Terms of Service",
+    "Refund Policy": "Refund Policy",
+    "No Contact Content Set": "No Contact Content Set",
+    "The administrator has not configured any contact content yet. You can set it in the settings page, supporting HTML or URL.": "The administrator has not configured any contact content yet. You can set it in the settings page, supporting HTML or URL.",
+    "The administrator has not configured a refund policy yet.": "The administrator has not configured a refund policy yet.",
+    "Provide Markdown, HTML, or an external URL for the refund policy": "Provide Markdown, HTML, or an external URL for the refund policy",
+    "Leave empty to disable the refund policy page. Supports Markdown, HTML, or a full URL to redirect users.": "Leave empty to disable the refund policy page. Supports Markdown, HTML, or a full URL to redirect users.",
+    "Enter HTML code (e.g., <p>Contact us...</p>) or a URL (e.g., https://example.com) to embed as iframe": "Enter HTML code (e.g., <p>Contact us...</p>) or a URL (e.g., https://example.com) to embed as iframe",
+    "and the": "and the",
+    "Contact page with support information.": "Contact page with support information.",
     "360": "360",
     "1000": "1000",
     "10000": "10000",

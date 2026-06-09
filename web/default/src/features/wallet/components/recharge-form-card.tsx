@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useState, useEffect } from 'react'
+import { Link } from '@tanstack/react-router'
 import { Gift, ExternalLink, Loader2, Receipt, WalletCards } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatNumber } from '@/lib/format'
@@ -24,6 +25,7 @@ import { cn } from '@/lib/utils'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -111,6 +113,8 @@ export function RechargeFormCard({
 }: RechargeFormCardProps) {
   const { t } = useTranslation()
   const [localAmount, setLocalAmount] = useState(topupAmount.toString())
+  // Payment consent: user must explicitly agree before any pay button is enabled.
+  const [agreed, setAgreed] = useState(false)
 
   useEffect(() => {
     setLocalAmount(topupAmount.toString())
@@ -210,6 +214,38 @@ export function RechargeFormCard({
       {/* Online Topup Section */}
       {hasAnyTopup ? (
         <div className='space-y-4 sm:space-y-6'>
+          {/* Payment consent — must be checked before any payment button is enabled */}
+          <div className='border-border/60 bg-muted/40 flex items-start gap-3 rounded-md border p-3'>
+            <Checkbox
+              id='payment-consent'
+              checked={agreed}
+              onCheckedChange={(value) => setAgreed(value === true)}
+              className='mt-0.5'
+            />
+            <Label
+              htmlFor='payment-consent'
+              className='text-muted-foreground items-start gap-1 text-left text-xs leading-5 font-normal'
+            >
+              <span>
+                {t('I have read and agree to the')}{' '}
+                <Link
+                  to='/user-agreement'
+                  target='_blank'
+                  className='text-primary hover:underline'
+                >
+                  {t('Terms of Service')}
+                </Link>{' '}
+                {t('and the')}{' '}
+                <Link
+                  to='/refund-policy'
+                  target='_blank'
+                  className='text-primary hover:underline'
+                >
+                  {t('Refund Policy')}
+                </Link>
+              </span>
+            </Label>
+          </div>
           {hasConfigurableTopup && (
             <>
               {presetAmounts.length > 0 && (
@@ -319,7 +355,7 @@ export function RechargeFormCard({
                           key={method.type}
                           variant='outline'
                           onClick={() => onPaymentMethodSelect(method)}
-                          disabled={disabled || !!paymentLoading}
+                          disabled={disabled || !!paymentLoading || !agreed}
                           className='h-9 min-w-0 justify-start gap-2 rounded-lg px-3'
                         >
                           {paymentLoading === method.type ? (
@@ -381,7 +417,7 @@ export function RechargeFormCard({
                             key={`${method.name}-${index}`}
                             variant='outline'
                             onClick={() => onWaffoMethodSelect(method, index)}
-                            disabled={belowMin || !!paymentLoading}
+                            disabled={belowMin || !!paymentLoading || !agreed}
                             className='h-9 min-w-0 justify-start gap-2 rounded-lg px-3'
                           >
                             {paymentLoading === loadingKey ? (
@@ -442,6 +478,7 @@ export function RechargeFormCard({
             <CreemProductsSection
               products={creemProducts}
               onProductSelect={onCreemProductSelect}
+              disabled={!agreed}
             />
           </div>
         )}

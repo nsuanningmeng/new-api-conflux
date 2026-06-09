@@ -40,12 +40,6 @@ interface FooterProps {
   className?: string
 }
 
-const NEW_API_FOOTER_ATTRIBUTION_KEY = [
-  'footer',
-  'new' + 'api',
-  'projectAttributionSuffix',
-].join('.')
-
 function FooterLinkItem(props: { link: FooterLink }) {
   const { t } = useTranslation()
   const isExternal = props.link.href.startsWith('http')
@@ -74,24 +68,30 @@ function FooterLinkItem(props: { link: FooterLink }) {
   )
 }
 
-function ProjectAttribution(props: { currentYear: number }) {
+function PolicyLinks() {
   const { t } = useTranslation()
 
   return (
-    <div className='text-muted-foreground/45 text-center text-xs sm:text-right'>
-      <span className='text-muted-foreground/45'>
-        &copy; {props.currentYear}{' '}
-        <a
-          href='https://github.com/QuantumNous/new-api'
-          target='_blank'
-          rel='noopener noreferrer'
-          className='text-foreground/70 hover:text-foreground font-medium transition-colors'
-        >
-          {t('New API')}
-        </a>
-        . {t(NEW_API_FOOTER_ATTRIBUTION_KEY)}
-      </span>
-    </div>
+    <nav className='flex flex-wrap items-center justify-center gap-x-4 gap-y-1 sm:justify-end'>
+      <Link
+        to='/user-agreement'
+        className='text-muted-foreground hover:text-foreground text-xs transition-colors'
+      >
+        {t('Terms of Service')}
+      </Link>
+      <Link
+        to='/privacy-policy'
+        className='text-muted-foreground hover:text-foreground text-xs transition-colors'
+      >
+        {t('Privacy Policy')}
+      </Link>
+      <Link
+        to='/refund-policy'
+        className='text-muted-foreground hover:text-foreground text-xs transition-colors'
+      >
+        {t('Refund Policy')}
+      </Link>
+    </nav>
   )
 }
 
@@ -183,7 +183,7 @@ export function Footer(props: FooterProps) {
               dangerouslySetInnerHTML={{ __html: footerHtml }}
             />
             <div className='border-border/60 w-full border-t pt-4 sm:w-auto sm:border-t-0 sm:border-l sm:pt-0 sm:pl-5'>
-              <ProjectAttribution currentYear={currentYear} />
+              <PolicyLinks />
             </div>
           </div>
         </div>
@@ -241,7 +241,7 @@ export function Footer(props: FooterProps) {
             &copy; {currentYear} {displayName}.{' '}
             {props.copyright ?? t('footer.defaultCopyright')}
           </p>
-          <ProjectAttribution currentYear={currentYear} />
+          <PolicyLinks />
         </div>
       </div>
     </footer>

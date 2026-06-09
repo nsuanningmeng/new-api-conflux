@@ -1,28 +1,10 @@
-/*
-Copyright (C) 2023-2026 QuantumNous
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-For commercial licensing, please contact support@quantumnous.com
-*/
 import { useQuery } from '@tanstack/react-query'
-import { Construction } from 'lucide-react'
+import { Mail } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Markdown } from '@/components/ui/markdown'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PublicLayout } from '@/components/layout'
-import { getAboutContent } from './api'
+import { getContactContent } from './api'
 
 function isValidUrl(value: string) {
   try {
@@ -37,20 +19,20 @@ function isLikelyHtml(value: string) {
   return /<\/?[a-z][\s\S]*>/i.test(value)
 }
 
-function EmptyAboutState() {
+function EmptyContactState() {
   const { t } = useTranslation()
 
   return (
     <div className='flex min-h-[60vh] items-center justify-center p-8'>
       <div className='max-w-2xl space-y-6 text-center'>
         <div className='flex justify-center'>
-          <Construction className='text-muted-foreground h-24 w-24' />
+          <Mail className='text-muted-foreground h-24 w-24' />
         </div>
         <div className='space-y-2'>
-          <h2 className='text-2xl font-bold'>{t('No About Content Set')}</h2>
+          <h2 className='text-2xl font-bold'>{t('No Contact Content Set')}</h2>
           <p className='text-muted-foreground'>
             {t(
-              'The administrator has not configured any about content yet. You can set it in the settings page, supporting HTML or URL.'
+              'The administrator has not configured any contact content yet. You can set it in the settings page, supporting HTML or URL.'
             )}
           </p>
         </div>
@@ -59,11 +41,11 @@ function EmptyAboutState() {
   )
 }
 
-export function About() {
+export function Contact() {
   const { t } = useTranslation()
   const { data, isLoading } = useQuery({
-    queryKey: ['about-content'],
-    queryFn: getAboutContent,
+    queryKey: ['contact-content'],
+    queryFn: getContactContent,
   })
 
   const rawContent = data?.data?.trim() ?? ''
@@ -87,7 +69,7 @@ export function About() {
   if (!hasContent) {
     return (
       <PublicLayout>
-        <EmptyAboutState />
+        <EmptyContactState />
       </PublicLayout>
     )
   }
@@ -98,7 +80,7 @@ export function About() {
         <iframe
           src={rawContent}
           className='h-[calc(100vh-3.5rem)] w-full border-0'
-          title={t('About')}
+          title={t('Contact Us')}
         />
       </PublicLayout>
     )

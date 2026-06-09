@@ -94,6 +94,11 @@ export function useTopNavLinks(): TopNavLink[] {
     }
   }
 
+  // Contact (placed to the left of About)
+  if (modules?.contact !== false) {
+    links.push({ title: t('Contact Us'), href: '/contact' })
+  }
+
   // About
   if (modules?.about !== false) {
     links.push({ title: t('About'), href: '/about' })

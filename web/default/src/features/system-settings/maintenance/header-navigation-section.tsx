@@ -48,6 +48,7 @@ const headerNavSchema = z.object({
   rankingsEnabled: z.boolean(),
   rankingsRequireAuth: z.boolean(),
   docs: z.boolean(),
+  contact: z.boolean(),
   about: z.boolean(),
 })
 
@@ -83,6 +84,10 @@ const toFormValues = (config: HeaderNavModulesConfig): HeaderNavFormValues => ({
       : Boolean(config.rankings.requireAuth),
   docs:
     config.docs === undefined ? HEADER_NAV_DEFAULT.docs : Boolean(config.docs),
+  contact:
+    config.contact === undefined
+      ? HEADER_NAV_DEFAULT.contact
+      : Boolean(config.contact),
   about:
     config.about === undefined
       ? HEADER_NAV_DEFAULT.about
@@ -112,6 +117,7 @@ export function HeaderNavigationSection({
       home: values.home,
       console: values.console,
       docs: values.docs,
+      contact: values.contact,
       about: values.about,
       pricing: {
         ...(config.pricing ?? HEADER_NAV_DEFAULT.pricing),
@@ -159,6 +165,11 @@ export function HeaderNavigationSection({
       key: 'docs',
       title: t('Docs'),
       description: t('Documentation or external knowledge base.'),
+    },
+    {
+      key: 'contact',
+      title: t('Contact Us'),
+      description: t('Contact page with support information.'),
     },
     {
       key: 'about',

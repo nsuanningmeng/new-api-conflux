@@ -63,10 +63,12 @@ export type SiteSettings = {
   Logo: string
   Footer: string
   About: string
+  Contact: string
   HomePageContent: string
   ServerAddress: string
   'legal.user_agreement': string
   'legal.privacy_policy': string
+  'legal.refund_policy': string
   HeaderNavModules: string
   SidebarModulesAdmin: string
   'seo_setting.title': string

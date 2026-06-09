@@ -1,5 +1,16 @@
 ﻿{
   "translation": {
+    "Contact Us": "联系我们",
+    "Terms of Service": "服务条款",
+    "Refund Policy": "退款政策",
+    "No Contact Content Set": "暂未设置联系我们内容",
+    "The administrator has not configured any contact content yet. You can set it in the settings page, supporting HTML or URL.": "管理员尚未配置联系我们内容。您可以在设置页面进行设置，支持 HTML 或 URL。",
+    "The administrator has not configured a refund policy yet.": "管理员尚未配置退款政策。",
+    "Provide Markdown, HTML, or an external URL for the refund policy": "为退款政策提供 Markdown、HTML 或外部 URL",
+    "Leave empty to disable the refund policy page. Supports Markdown, HTML, or a full URL to redirect users.": "留空则禁用退款政策页面。支持 Markdown、HTML 或完整 URL 以跳转用户。",
+    "Enter HTML code (e.g., <p>Contact us...</p>) or a URL (e.g., https://example.com) to embed as iframe": "输入 HTML 代码（例如 <p>联系我们...</p>）或 URL（例如 https://example.com）以 iframe 形式嵌入",
+    "and the": "和",
+    "Contact page with support information.": "联系页面，包含支持信息。",
     "360": "360",
     "1000": "1000",
     "10000": "10000",

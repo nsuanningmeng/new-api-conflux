@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from 'react-i18next'
 import { formatNumber } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatCreemPrice } from '../lib/format'
@@ -27,12 +28,14 @@ interface CreemProductsSectionProps {
   products: CreemProduct[]
   onProductSelect: (product: CreemProduct) => void
   loading?: boolean
+  disabled?: boolean
 }
 
 export function CreemProductsSection({
   products,
   onProductSelect,
   loading,
+  disabled,
 }: CreemProductsSectionProps) {
   const { t } = useTranslation()
 
@@ -55,8 +58,17 @@ export function CreemProductsSection({
       {products.map((product) => (
         <Card
           key={product.productId}
-          className='hover:border-foreground/50 cursor-pointer transition-all hover:shadow-md'
-          onClick={() => onProductSelect(product)}
+          aria-disabled={disabled}
+          className={cn(
+            'transition-all',
+            disabled
+              ? 'pointer-events-none opacity-50'
+              : 'hover:border-foreground/50 cursor-pointer hover:shadow-md'
+          )}
+          onClick={() => {
+            if (disabled) return
+            onProductSelect(product)
+          }}
         >
           <CardContent className='p-3 text-center sm:p-4'>
             <div className='mb-2 text-lg font-medium'>{product.name}</div>
