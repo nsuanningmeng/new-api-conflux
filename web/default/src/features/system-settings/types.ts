@@ -312,6 +312,9 @@ export type OperationsSettings = {
   'perf_metrics_setting.flush_interval': number
   'perf_metrics_setting.bucket_time': 'hour' | 'minute' | '5min'
   'perf_metrics_setting.retention_days': number
+  'perf_metrics_setting.error_status_codes': string
+  'perf_metrics_setting.success_threshold_green': number
+  'perf_metrics_setting.success_threshold_red': number
 }
 
 export type SecuritySettings = {

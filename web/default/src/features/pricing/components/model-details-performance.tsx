@@ -18,6 +18,7 @@ import {
   formatThroughput,
   formatUptimePct,
 } from '@/features/performance-metrics/lib/format'
+import { useSuccessThresholds } from '@/features/performance-metrics/lib/use-success-thresholds'
 import type { PerformanceGroup } from '@/features/performance-metrics/types'
 import { type UptimeDayPoint } from '../lib/mock-stats'
 import type { PricingModel } from '../types'
@@ -138,6 +139,7 @@ function average(
 
 export function ModelDetailsPerformance(props: { model: PricingModel }) {
   const { t } = useTranslation()
+  const { green: thresholdGreen, red: thresholdRed } = useSuccessThresholds()
   const metricsQuery = useQuery({
     queryKey: ['perf-metrics', props.model.model_name],
     queryFn: () => getPerfMetrics(props.model.model_name, 24),
@@ -194,9 +196,9 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
       : 0
   const incidentCount = uptimeSeries.reduce((s, p) => s + p.incidents, 0)
   let intent: 'default' | 'warning' | 'success' = 'warning'
-  if (successRate >= 99.9) {
+  if (successRate >= thresholdGreen) {
     intent = 'success'
-  } else if (successRate >= 99) {
+  } else if (successRate >= thresholdRed) {
     intent = 'default'
   }
 

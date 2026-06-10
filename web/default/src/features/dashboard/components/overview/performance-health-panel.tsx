@@ -33,17 +33,17 @@ function simpleAverage(
   return count > 0 ? total / count : NaN
 }
 
-function rateTextClass(rate: number): string {
+function rateTextClass(rate: number, green: number, red: number): string {
   if (!Number.isFinite(rate)) return 'text-muted-foreground'
-  if (rate >= 99.9) return 'text-success'
-  if (rate >= 99) return 'text-warning'
+  if (rate >= green) return 'text-success'
+  if (rate >= red) return 'text-warning'
   return 'text-destructive'
 }
 
-function rateDotClass(rate: number): string {
+function rateDotClass(rate: number, green: number, red: number): string {
   if (!Number.isFinite(rate)) return 'bg-muted-foreground'
-  if (rate >= 99.9) return 'bg-success'
-  if (rate >= 99) return 'bg-warning'
+  if (rate >= green) return 'bg-success'
+  if (rate >= red) return 'bg-warning'
   return 'bg-destructive'
 }
 
@@ -60,6 +60,8 @@ export function PerformanceHealthPanel() {
     () => metricsQuery.data?.data.models ?? [],
     [metricsQuery.data]
   )
+  const thresholdGreen = metricsQuery.data?.data.success_threshold_green ?? 99.9
+  const thresholdRed = metricsQuery.data?.data.success_threshold_red ?? 99.0
 
   const summary = useMemo(() => {
     return {
@@ -92,7 +94,7 @@ export function PerformanceHealthPanel() {
             label={t('Success rate')}
             value={formatUptimePct(summary.successRate)}
             loading={loading}
-            valueClassName={rateTextClass(summary.successRate)}
+            valueClassName={rateTextClass(summary.successRate, thresholdGreen, thresholdRed)}
           />
           <MetricCell
             icon={Timer}
@@ -130,13 +132,13 @@ export function PerformanceHealthPanel() {
                   </span>
                   <span className='inline-flex shrink-0 items-center gap-1'>
                     <span
-                      className={cn('size-1.5 rounded-full', rateDotClass(model.success_rate))}
+                      className={cn('size-1.5 rounded-full', rateDotClass(model.success_rate, thresholdGreen, thresholdRed))}
                       aria-hidden='true'
                     />
                     <span
                       className={cn(
                         'font-mono text-[11px] font-semibold tabular-nums',
-                        rateTextClass(model.success_rate)
+                        rateTextClass(model.success_rate, thresholdGreen, thresholdRed)
                       )}
                     >
                       {formatUptimePct(model.success_rate)}

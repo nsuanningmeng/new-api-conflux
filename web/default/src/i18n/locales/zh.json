@@ -1,6 +1,13 @@
 ﻿{
   "translation": {
+    "Comma-separated HTTP status codes or ranges counted as errors (e.g. 500,429 or 500-599). Leave empty to count all non-2xx as errors. 200 is never counted as an error.": "以逗号分隔、计为错误的 HTTP 状态码或范围（如 500,429 或 500-599）。留空则所有非 2xx 均计为错误。200 永远不计为错误。",
     "Contact Us": "联系我们",
+    "Error status codes": "错误状态码",
+    "Green threshold (%)": "绿色阈值 (%)",
+    "Invalid format. Use comma-separated status codes or ranges (e.g. 500,429 or 500-599)": "格式无效。请使用逗号分隔的状态码或范围（如 500,429 或 500-599）",
+    "Red threshold (%)": "红色阈值 (%)",
+    "Success rate at or above this value shows green": "成功率达到或高于该值时显示绿色",
+    "Success rate below this value shows red; between red and green shows yellow": "成功率低于该值时显示红色；介于红色与绿色阈值之间显示黄色",
     "Terms of Service": "服务条款",
     "Refund Policy": "退款政策",
     "No Contact Content Set": "暂未设置联系我们内容",

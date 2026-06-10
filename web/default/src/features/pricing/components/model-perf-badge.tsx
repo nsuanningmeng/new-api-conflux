@@ -5,6 +5,7 @@ import {
   formatLatency,
   formatThroughput,
 } from '@/features/performance-metrics/lib/format'
+import { useSuccessThresholds } from '@/features/performance-metrics/lib/use-success-thresholds'
 
 export type ModelPerfBadgeData = {
   avg_latency_ms: number
@@ -24,6 +25,7 @@ export const ModelPerfBadge = memo(function ModelPerfBadge(
   props: ModelPerfBadgeProps
 ) {
   const { t } = useTranslation()
+  const { green, red } = useSuccessThresholds()
 
   if (!props.perf) {
     return null
@@ -32,9 +34,9 @@ export const ModelPerfBadge = memo(function ModelPerfBadge(
   const { avg_latency_ms, avg_tps, success_rate } = props.perf
 
   let statusColor = 'bg-emerald-500'
-  if (success_rate < 99) {
+  if (success_rate < red) {
     statusColor = 'bg-red-500'
-  } else if (success_rate < 99.9) {
+  } else if (success_rate < green) {
     statusColor = 'bg-amber-500'
   }
 

@@ -42,6 +42,13 @@ func RecordRelaySample(info *relaycommon.RelayInfo, success bool, outputTokens i
 	if generationMs <= 0 {
 		generationMs = latencyMs
 	}
+	// Only failures read LastError: success-path callers invoke this from a
+	// goroutine that races with the controller clearing LastError, and a
+	// stale error from a retried attempt must not reclassify a success.
+	statusCode := 0
+	if !success && info.LastError != nil {
+		statusCode = info.LastError.StatusCode
+	}
 	Record(Sample{
 		Model:        info.OriginModelName,
 		Group:        info.UsingGroup,
@@ -49,6 +56,7 @@ func RecordRelaySample(info *relaycommon.RelayInfo, success bool, outputTokens i
 		TtftMs:       ttftMs,
 		HasTtft:      hasTtft,
 		Success:      success,
+		StatusCode:   statusCode,
 		OutputTokens: outputTokens,
 		GenerationMs: generationMs,
 	})
@@ -64,6 +72,15 @@ func Record(sample Sample) {
 	}
 	if sample.LatencyMs < 0 {
 		sample.LatencyMs = 0
+	}
+	// A failure is excluded from error accounting when a custom
+	// ErrorStatusCodes list is configured and its status code is not covered.
+	// Successes are never reclassified, and a failure carrying a 2xx status
+	// (error body inside a 2xx response) always counts as a failure.
+	if !sample.Success && sample.StatusCode != 0 &&
+		(sample.StatusCode < 200 || sample.StatusCode > 299) &&
+		!perf_metrics_setting.IsErrorStatusCode(sample.StatusCode) {
+		sample.Success = true
 	}
 
 	key := bucketKey{

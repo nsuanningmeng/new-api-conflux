@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
+	"github.com/QuantumNous/new-api/setting/perf_metrics_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/gin-gonic/gin"
@@ -29,9 +30,14 @@ func GetPerfMetricsSummary(c *gin.Context) {
 		return
 	}
 
+	green, red := perf_metrics_setting.GetSuccessThresholds()
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"data":    result,
+		"data": gin.H{
+			"models":                  result.Models,
+			"success_threshold_green": green,
+			"success_threshold_red":   red,
+		},
 	})
 }
 

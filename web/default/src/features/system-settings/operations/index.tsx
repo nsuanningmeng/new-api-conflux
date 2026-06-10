@@ -47,6 +47,9 @@ const defaultOperationsSettings: OperationsSettings = {
   'perf_metrics_setting.flush_interval': 5,
   'perf_metrics_setting.bucket_time': 'hour',
   'perf_metrics_setting.retention_days': 0,
+  'perf_metrics_setting.error_status_codes': '',
+  'perf_metrics_setting.success_threshold_green': 99.9,
+  'perf_metrics_setting.success_threshold_red': 99.0,
 }
 
 export function OperationsSettings() {

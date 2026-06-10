@@ -38,5 +38,7 @@ export type PerfSummaryAllData = {
   message?: string
   data: {
     models: PerfModelSummary[]
+    success_threshold_green: number
+    success_threshold_red: number
   }
 }

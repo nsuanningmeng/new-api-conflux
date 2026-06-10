@@ -26,6 +26,7 @@ import {
   FormField,
   FormItem,
   FormLabel,
+  FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -64,6 +65,25 @@ const perfSchema = z.object({
   'perf_metrics_setting.flush_interval': z.coerce.number().min(1),
   'perf_metrics_setting.bucket_time': z.enum(['minute', '5min', 'hour']),
   'perf_metrics_setting.retention_days': z.coerce.number().min(0),
+  'perf_metrics_setting.error_status_codes': z
+    .string()
+    .refine(
+      (v) =>
+        v
+          .split(/[,，]/)
+          .every((part) => {
+            const token = part.replace(/\s+/g, '')
+            if (token === '') return true
+            const match = /^(\d{3})(?:-(\d{3}))?$/.exec(token)
+            if (!match) return false
+            const start = Number(match[1])
+            const end = match[2] === undefined ? start : Number(match[2])
+            return start >= 100 && end >= start && end <= 599
+          }),
+      'Invalid format. Use comma-separated status codes or ranges (e.g. 500,429 or 500-599)'
+    ),
+  'perf_metrics_setting.success_threshold_green': z.coerce.number().min(0).max(100),
+  'perf_metrics_setting.success_threshold_red': z.coerce.number().min(0).max(100),
 })
 
 type PerfFormValues = z.infer<typeof perfSchema>
@@ -550,6 +570,73 @@ export function PerformanceSection(props: Props) {
                   </FormControl>
                   <FormDescription>
                     {t('0 means data is kept permanently')}
+                  </FormDescription>
+                </FormItem>
+              )}
+            />
+          </div>
+
+          <div className='grid grid-cols-1 gap-4 md:grid-cols-3'>
+            <FormField
+              control={form.control}
+              name='perf_metrics_setting.error_status_codes'
+              render={({ field }) => (
+                <FormItem className='md:col-span-3'>
+                  <FormLabel>{t('Error status codes')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder='500-599,429'
+                      {...field}
+                      disabled={!perfMetricsEnabled}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t('Comma-separated HTTP status codes or ranges counted as errors (e.g. 500,429 or 500-599). Leave empty to count all non-2xx as errors. 200 is never counted as an error.')}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='perf_metrics_setting.success_threshold_green'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Green threshold (%)')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type='number'
+                      min={0}
+                      max={100}
+                      step='any'
+                      {...field}
+                      disabled={!perfMetricsEnabled}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t('Success rate at or above this value shows green')}
+                  </FormDescription>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='perf_metrics_setting.success_threshold_red'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Red threshold (%)')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type='number'
+                      min={0}
+                      max={100}
+                      step='any'
+                      {...field}
+                      disabled={!perfMetricsEnabled}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t('Success rate below this value shows red; between red and green shows yellow')}
                   </FormDescription>
                 </FormItem>
               )}

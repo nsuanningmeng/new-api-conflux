@@ -1,6 +1,13 @@
 {
   "translation": {
+    "Comma-separated HTTP status codes or ranges counted as errors (e.g. 500,429 or 500-599). Leave empty to count all non-2xx as errors. 200 is never counted as an error.": "Comma-separated HTTP status codes or ranges counted as errors (e.g. 500,429 or 500-599). Leave empty to count all non-2xx as errors. 200 is never counted as an error.",
     "Contact Us": "Contact Us",
+    "Error status codes": "Error status codes",
+    "Green threshold (%)": "Green threshold (%)",
+    "Invalid format. Use comma-separated status codes or ranges (e.g. 500,429 or 500-599)": "Invalid format. Use comma-separated status codes or ranges (e.g. 500,429 or 500-599)",
+    "Red threshold (%)": "Red threshold (%)",
+    "Success rate at or above this value shows green": "Success rate at or above this value shows green",
+    "Success rate below this value shows red; between red and green shows yellow": "Success rate below this value shows red; between red and green shows yellow",
     "Terms of Service": "Terms of Service",
     "Refund Policy": "Refund Policy",
     "No Contact Content Set": "No Contact Content Set",

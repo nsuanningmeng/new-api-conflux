@@ -61,17 +61,17 @@ function buildPerformanceSummary(rows: PerfModelSummary[]): PerformanceSummary {
   }
 }
 
-function successRateClassName(successRate: number): string {
+function successRateClassName(successRate: number, green: number, red: number): string {
   if (!Number.isFinite(successRate)) return 'text-muted-foreground'
-  if (successRate >= 99.9) return 'text-success'
-  if (successRate >= 99) return 'text-warning'
+  if (successRate >= green) return 'text-success'
+  if (successRate >= red) return 'text-warning'
   return 'text-destructive'
 }
 
-function successDotClassName(successRate: number): string {
+function successDotClassName(successRate: number, green: number, red: number): string {
   if (!Number.isFinite(successRate)) return 'bg-muted-foreground'
-  if (successRate >= 99.9) return 'bg-success'
-  if (successRate >= 99) return 'bg-warning'
+  if (successRate >= green) return 'bg-success'
+  if (successRate >= red) return 'bg-warning'
   return 'bg-destructive'
 }
 
@@ -88,6 +88,8 @@ export function PerformanceOverview() {
     () => metricsQuery.data?.data.models ?? [],
     [metricsQuery.data]
   )
+  const thresholdGreen = metricsQuery.data?.data.success_threshold_green ?? 99.9
+  const thresholdRed = metricsQuery.data?.data.success_threshold_red ?? 99.0
   const summary = useMemo(() => buildPerformanceSummary(models), [models])
   const topModels = useMemo(() => models.slice(0, TOP_MODEL_LIMIT), [models])
   const loading = metricsQuery.isLoading
@@ -134,7 +136,7 @@ export function PerformanceOverview() {
               icon={HeartPulse}
               label={t('Success rate')}
               value={formatUptimePct(summary.successRate)}
-              valueClassName={successRateClassName(summary.successRate)}
+              valueClassName={successRateClassName(summary.successRate, thresholdGreen, thresholdRed)}
             />
             <InlineMetric
               icon={Timer}
@@ -156,7 +158,7 @@ export function PerformanceOverview() {
         {!loading && hasData && (
           <div className='flex flex-wrap items-center gap-1.5'>
             {topModels.map((model) => (
-              <ModelBadge key={model.model_name} model={model} />
+              <ModelBadge key={model.model_name} model={model} green={thresholdGreen} red={thresholdRed} />
             ))}
           </div>
         )}
@@ -192,7 +194,7 @@ function InlineMetric(props: {
   )
 }
 
-function ModelBadge(props: { model: PerfModelSummary }) {
+function ModelBadge(props: { model: PerfModelSummary; green: number; red: number }) {
   const model = props.model
 
   return (
@@ -203,14 +205,14 @@ function ModelBadge(props: { model: PerfModelSummary }) {
       <span
         className={cn(
           'size-1.5 rounded-full',
-          successDotClassName(model.success_rate)
+          successDotClassName(model.success_rate, props.green, props.red)
         )}
         aria-hidden='true'
       />
       <span
         className={cn(
           'font-mono text-[11px] font-semibold tabular-nums',
-          successRateClassName(model.success_rate)
+          successRateClassName(model.success_rate, props.green, props.red)
         )}
       >
         {formatUptimePct(model.success_rate)}
