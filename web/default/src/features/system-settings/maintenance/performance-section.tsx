@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import * as z from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -46,47 +46,125 @@ import { SettingsSection } from '../components/settings-section'
 import { useResetForm } from '../hooks/use-reset-form'
 import { useUpdateOption } from '../hooks/use-update-option'
 
+// react-hook-form treats dots in field names as nested paths, so the schema
+// must mirror that nested shape; flat dotted keys would never receive edits.
 const perfSchema = z.object({
-  'performance_setting.disk_cache_enabled': z.boolean(),
-  'performance_setting.disk_cache_threshold_mb': z.coerce.number().min(1),
-  'performance_setting.disk_cache_max_size_mb': z.coerce.number().min(100),
-  'performance_setting.disk_cache_path': z.string().optional(),
-  'performance_setting.monitor_enabled': z.boolean(),
-  'performance_setting.monitor_cpu_threshold': z.coerce.number().min(0),
-  'performance_setting.monitor_memory_threshold': z.coerce
-    .number()
-    .min(0)
-    .max(100),
-  'performance_setting.monitor_disk_threshold': z.coerce
-    .number()
-    .min(0)
-    .max(100),
-  'perf_metrics_setting.enabled': z.boolean(),
-  'perf_metrics_setting.flush_interval': z.coerce.number().min(1),
-  'perf_metrics_setting.bucket_time': z.enum(['minute', '5min', 'hour']),
-  'perf_metrics_setting.retention_days': z.coerce.number().min(0),
-  'perf_metrics_setting.error_status_codes': z
-    .string()
-    .refine(
-      (v) =>
-        v
-          .split(/[,，]/)
-          .every((part) => {
-            const token = part.replace(/\s+/g, '')
-            if (token === '') return true
-            const match = /^(\d{3})(?:-(\d{3}))?$/.exec(token)
-            if (!match) return false
-            const start = Number(match[1])
-            const end = match[2] === undefined ? start : Number(match[2])
-            return start >= 100 && end >= start && end <= 599
-          }),
-      'Invalid format. Use comma-separated status codes or ranges (e.g. 500,429 or 500-599)'
-    ),
-  'perf_metrics_setting.success_threshold_green': z.coerce.number().min(0).max(100),
-  'perf_metrics_setting.success_threshold_red': z.coerce.number().min(0).max(100),
+  performance_setting: z.object({
+    disk_cache_enabled: z.boolean(),
+    disk_cache_threshold_mb: z.coerce.number().min(1),
+    disk_cache_max_size_mb: z.coerce.number().min(100),
+    disk_cache_path: z.string().optional(),
+    monitor_enabled: z.boolean(),
+    monitor_cpu_threshold: z.coerce.number().min(0),
+    monitor_memory_threshold: z.coerce.number().min(0).max(100),
+    monitor_disk_threshold: z.coerce.number().min(0).max(100),
+  }),
+  perf_metrics_setting: z.object({
+    enabled: z.boolean(),
+    flush_interval: z.coerce.number().min(1),
+    bucket_time: z.enum(['minute', '5min', 'hour']),
+    retention_days: z.coerce.number().min(0),
+    error_status_codes: z
+      .string()
+      .refine(
+        (v) =>
+          v
+            .split(/[,，]/)
+            .every((part) => {
+              const token = part.replace(/\s+/g, '')
+              if (token === '') return true
+              const match = /^(\d{3})(?:-(\d{3}))?$/.exec(token)
+              if (!match) return false
+              const start = Number(match[1])
+              const end = match[2] === undefined ? start : Number(match[2])
+              return start >= 100 && end >= start && end <= 599
+            }),
+        'Invalid format. Use comma-separated status codes or ranges (e.g. 500,429 or 500-599)'
+      ),
+    success_threshold_green: z.coerce.number().min(0).max(100),
+    success_threshold_red: z.coerce.number().min(0).max(100),
+  }),
 })
 
 type PerfFormValues = z.infer<typeof perfSchema>
+
+type PerfFlatValues = {
+  'performance_setting.disk_cache_enabled': boolean
+  'performance_setting.disk_cache_threshold_mb': number
+  'performance_setting.disk_cache_max_size_mb': number
+  'performance_setting.disk_cache_path': string
+  'performance_setting.monitor_enabled': boolean
+  'performance_setting.monitor_cpu_threshold': number
+  'performance_setting.monitor_memory_threshold': number
+  'performance_setting.monitor_disk_threshold': number
+  'perf_metrics_setting.enabled': boolean
+  'perf_metrics_setting.flush_interval': number
+  'perf_metrics_setting.bucket_time': 'minute' | '5min' | 'hour'
+  'perf_metrics_setting.retention_days': number
+  'perf_metrics_setting.error_status_codes': string
+  'perf_metrics_setting.success_threshold_green': number
+  'perf_metrics_setting.success_threshold_red': number
+}
+
+const buildFormDefaults = (defaults: PerfFlatValues): PerfFormValues => ({
+  performance_setting: {
+    disk_cache_enabled: defaults['performance_setting.disk_cache_enabled'],
+    disk_cache_threshold_mb:
+      defaults['performance_setting.disk_cache_threshold_mb'],
+    disk_cache_max_size_mb:
+      defaults['performance_setting.disk_cache_max_size_mb'],
+    disk_cache_path: defaults['performance_setting.disk_cache_path'],
+    monitor_enabled: defaults['performance_setting.monitor_enabled'],
+    monitor_cpu_threshold:
+      defaults['performance_setting.monitor_cpu_threshold'],
+    monitor_memory_threshold:
+      defaults['performance_setting.monitor_memory_threshold'],
+    monitor_disk_threshold:
+      defaults['performance_setting.monitor_disk_threshold'],
+  },
+  perf_metrics_setting: {
+    enabled: defaults['perf_metrics_setting.enabled'],
+    flush_interval: defaults['perf_metrics_setting.flush_interval'],
+    bucket_time: defaults['perf_metrics_setting.bucket_time'],
+    retention_days: defaults['perf_metrics_setting.retention_days'],
+    error_status_codes: defaults['perf_metrics_setting.error_status_codes'],
+    success_threshold_green:
+      defaults['perf_metrics_setting.success_threshold_green'],
+    success_threshold_red:
+      defaults['perf_metrics_setting.success_threshold_red'],
+  },
+})
+
+const flattenFormValues = (values: PerfFormValues): PerfFlatValues => ({
+  'performance_setting.disk_cache_enabled':
+    values.performance_setting.disk_cache_enabled,
+  'performance_setting.disk_cache_threshold_mb':
+    values.performance_setting.disk_cache_threshold_mb,
+  'performance_setting.disk_cache_max_size_mb':
+    values.performance_setting.disk_cache_max_size_mb,
+  'performance_setting.disk_cache_path':
+    values.performance_setting.disk_cache_path ?? '',
+  'performance_setting.monitor_enabled':
+    values.performance_setting.monitor_enabled,
+  'performance_setting.monitor_cpu_threshold':
+    values.performance_setting.monitor_cpu_threshold,
+  'performance_setting.monitor_memory_threshold':
+    values.performance_setting.monitor_memory_threshold,
+  'performance_setting.monitor_disk_threshold':
+    values.performance_setting.monitor_disk_threshold,
+  'perf_metrics_setting.enabled': values.perf_metrics_setting.enabled,
+  'perf_metrics_setting.flush_interval':
+    values.perf_metrics_setting.flush_interval,
+  'perf_metrics_setting.bucket_time': values.perf_metrics_setting.bucket_time,
+  'perf_metrics_setting.retention_days':
+    values.perf_metrics_setting.retention_days,
+  'perf_metrics_setting.error_status_codes':
+    values.perf_metrics_setting.error_status_codes,
+  'perf_metrics_setting.success_threshold_green':
+    values.perf_metrics_setting.success_threshold_green,
+  'perf_metrics_setting.success_threshold_red':
+    values.perf_metrics_setting.success_threshold_red,
+})
 
 function formatBytes(bytes: number, decimals = 2): string {
   if (!bytes || isNaN(bytes)) return '0 Bytes'
@@ -100,7 +178,7 @@ function formatBytes(bytes: number, decimals = 2): string {
 }
 
 interface Props {
-  defaultValues: PerfFormValues
+  defaultValues: PerfFlatValues
 }
 
 type LogInfo = {
@@ -154,14 +232,19 @@ export function PerformanceSection(props: Props) {
   const [logCleanupValue, setLogCleanupValue] = useState(10)
   const [logCleanupLoading, setLogCleanupLoading] = useState(false)
 
+  const formDefaults = useMemo(
+    () => buildFormDefaults(props.defaultValues),
+    [props.defaultValues]
+  )
+
   const form = useForm<PerfFormValues>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(perfSchema) as any,
-    defaultValues: props.defaultValues,
+    defaultValues: formDefaults,
   })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  useResetForm(form as any, props.defaultValues)
+  useResetForm(form as any, formDefaults)
 
   const fetchStats = useCallback(async () => {
     try {
@@ -187,19 +270,18 @@ export function PerformanceSection(props: Props) {
   }, [fetchStats, fetchLogInfo])
 
   const onSubmit = async (data: PerfFormValues) => {
-    const entries = Object.entries(data) as [string, unknown][]
-    const updates = entries.filter(
-      ([key, value]) =>
-        value !== (props.defaultValues[key as keyof PerfFormValues] as unknown)
-    )
+    const flattened = flattenFormValues(data)
+    const updates = (
+      Object.keys(flattened) as Array<keyof PerfFlatValues>
+    ).filter((key) => flattened[key] !== props.defaultValues[key])
     if (updates.length === 0) {
       toast.info(t('No changes to save'))
       return
     }
-    for (const [key, value] of updates) {
+    for (const key of updates) {
       await updateOption.mutateAsync({
         key,
-        value: value as string | number | boolean,
+        value: flattened[key],
       })
     }
     toast.success(t('Saved successfully'))
