@@ -25,6 +25,7 @@ import {
 import {
   getDefaultPaymentType,
   getMinTopupAmount,
+  getMaxTopupAmount,
   isWaffoPancakePayment,
 } from './lib'
 import type {
@@ -149,9 +150,13 @@ export function Wallet(props: WalletProps) {
     setPaymentLoading(method.type)
 
     try {
-      // Validate minimum topup
+      // Validate single-topup limits
       const minTopup = getMinTopupAmount(topupInfo)
       if (topupAmount < minTopup) {
+        return
+      }
+      const maxTopup = getMaxTopupAmount(topupInfo)
+      if (maxTopup > 0 && topupAmount > maxTopup) {
         return
       }
 
@@ -273,7 +278,6 @@ export function Wallet(props: WalletProps) {
                   topupLink={topupInfo?.topup_link}
                   loading={topupLoading}
                   priceRatio={(status?.price as number) || 1}
-                  usdExchangeRate={effectiveUsdExchangeRate}
                   onOpenBilling={() => setBillingDialogOpen(true)}
                   creemProducts={topupInfo?.creem_products}
                   enableCreemTopup={topupInfo?.enable_creem_topup}

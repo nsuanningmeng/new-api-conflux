@@ -1,6 +1,14 @@
 import { lazy, Suspense } from 'react'
 import { parseCurrencyDisplayType } from '@/lib/currency'
+import { CheckinSettingsSection } from '../general/checkin-settings-section'
+import { PricingSection } from '../general/pricing-section'
+import { QuotaSettingsSection } from '../general/quota-settings-section'
 import { CardShopAdminSection } from '../integrations/card-shop-admin-section'
+import { PaymentSettingsSection } from '../integrations/payment-settings-section'
+import { RatioSettingsCard } from '../models/ratio-settings-card'
+import type { BillingSettings } from '../types'
+import { createSectionRegistry } from '../utils/section-registry'
+
 // Lazy-loaded: pulls in the heavy VChart library, which would otherwise be
 // bundled into the settings route chunk and block first paint for everyone
 // opening billing settings, even those who never view the analytics tab.
@@ -9,13 +17,6 @@ const CardShopAnalyticsSection = lazy(() =>
     default: m.CardShopAnalyticsSection,
   }))
 )
-import { CheckinSettingsSection } from '../general/checkin-settings-section'
-import { PricingSection } from '../general/pricing-section'
-import { QuotaSettingsSection } from '../general/quota-settings-section'
-import { PaymentSettingsSection } from '../integrations/payment-settings-section'
-import { RatioSettingsCard } from '../models/ratio-settings-card'
-import type { BillingSettings } from '../types'
-import { createSectionRegistry } from '../utils/section-registry'
 
 const getModelDefaults = (settings: BillingSettings) => ({
   ModelPrice: settings.ModelPrice,
@@ -129,6 +130,7 @@ const BILLING_SECTIONS = [
           EpayKey: settings.EpayKey,
           Price: settings.Price,
           MinTopUp: settings.MinTopUp,
+          MaxTopUp: settings['payment_setting.max_topup'] ?? 0,
           CustomCallbackAddress: settings.CustomCallbackAddress,
           PayMethods: settings.PayMethods,
           AmountOptions: settings['payment_setting.amount_options'],
@@ -194,9 +196,7 @@ const BILLING_SECTIONS = [
   {
     id: 'card-shop',
     titleKey: 'Card Shop',
-    build: (_settings: BillingSettings) => (
-      <CardShopAdminSection />
-    ),
+    build: (_settings: BillingSettings) => <CardShopAdminSection />,
   },
   {
     id: 'card-shop-analytics',

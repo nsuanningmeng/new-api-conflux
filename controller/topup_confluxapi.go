@@ -30,6 +30,7 @@ const (
 )
 
 const confluxAPICardShopWebhookMaxAgeSeconds int64 = 5 * 60
+
 var processedConfluxAPICardShopNotifyIDs sync.Map
 
 type ConfluxAPIPayRequest struct {
@@ -172,6 +173,10 @@ func RequestConfluxAPIAmount(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": fmt.Sprintf("充值数量不能小于 %d", setting.ConfluxAPIMinTopUp)})
 		return
 	}
+	if errMsg := checkMaxTopupLimit(c, req.Amount); errMsg != "" {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": errMsg})
+		return
+	}
 
 	id := c.GetInt("id")
 	group, err := model.GetUserGroup(id, true)
@@ -206,6 +211,10 @@ func RequestConfluxAPIPay(c *gin.Context) {
 	}
 	if req.Amount < int64(setting.ConfluxAPIMinTopUp) {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": fmt.Sprintf("充值数量不能小于 %d", setting.ConfluxAPIMinTopUp)})
+		return
+	}
+	if errMsg := checkMaxTopupLimit(c, req.Amount); errMsg != "" {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": errMsg})
 		return
 	}
 

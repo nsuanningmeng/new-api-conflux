@@ -64,88 +64,102 @@ import {
   type WaffoSettingsValues,
 } from './waffo-settings-section'
 
-const paymentSchema = z.object({
-  PayAddress: z.string().refine((value) => {
-    const trimmed = value.trim()
-    if (!trimmed) return true
-    return /^https?:\/\//.test(trimmed)
-  }, 'Provide a valid callback URL starting with http:// or https://'),
-  EpayId: z.string(),
-  EpayKey: z.string(),
-  Price: z.coerce.number().min(0),
-  MinTopUp: z.coerce.number().min(0),
-  CustomCallbackAddress: z.string().refine((value) => {
-    const trimmed = value.trim()
-    if (!trimmed) return true
-    return /^https?:\/\//.test(trimmed)
-  }, 'Provide a valid URL starting with http:// or https://'),
-  PayMethods: z.string().superRefine((value, ctx) => {
-    const error = getJsonError(value)
-    if (error) {
+const paymentSchema = z
+  .object({
+    PayAddress: z.string().refine((value) => {
+      const trimmed = value.trim()
+      if (!trimmed) return true
+      return /^https?:\/\//.test(trimmed)
+    }, 'Provide a valid callback URL starting with http:// or https://'),
+    EpayId: z.string(),
+    EpayKey: z.string(),
+    Price: z.coerce.number().min(0),
+    MinTopUp: z.coerce.number().min(0),
+    MaxTopUp: z.coerce.number().min(0),
+    CustomCallbackAddress: z.string().refine((value) => {
+      const trimmed = value.trim()
+      if (!trimmed) return true
+      return /^https?:\/\//.test(trimmed)
+    }, 'Provide a valid URL starting with http:// or https://'),
+    PayMethods: z.string().superRefine((value, ctx) => {
+      const error = getJsonError(value)
+      if (error) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: error,
+        })
+      }
+    }),
+    AmountOptions: z.string().superRefine((value, ctx) => {
+      const error = getJsonError(value, (parsed) => Array.isArray(parsed))
+      if (error) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: error,
+        })
+      }
+    }),
+    AmountDiscount: z.string().superRefine((value, ctx) => {
+      const error = getJsonError(
+        value,
+        (parsed) =>
+          !!parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      )
+      if (error) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: error,
+        })
+      }
+    }),
+    StripeApiSecret: z.string(),
+    StripeWebhookSecret: z.string(),
+    StripePriceId: z.string(),
+    StripeUnitPrice: z.coerce.number().min(0),
+    StripeMinTopUp: z.coerce.number().min(0),
+    StripePromotionCodesEnabled: z.boolean(),
+    CreemApiKey: z.string(),
+    CreemWebhookSecret: z.string(),
+    CreemTestMode: z.boolean(),
+    CreemProducts: z.string().superRefine((value, ctx) => {
+      const error = getJsonError(value, (parsed) => Array.isArray(parsed))
+      if (error) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: error,
+        })
+      }
+    }),
+    WaffoEnabled: z.boolean(),
+    WaffoApiKey: z.string(),
+    WaffoPrivateKey: z.string(),
+    WaffoPublicCert: z.string(),
+    WaffoSandboxPublicCert: z.string(),
+    WaffoSandboxApiKey: z.string(),
+    WaffoSandboxPrivateKey: z.string(),
+    WaffoSandbox: z.boolean(),
+    WaffoMerchantId: z.string(),
+    WaffoCurrency: z.string(),
+    WaffoUnitPrice: z.coerce.number().min(0),
+    WaffoMinTopUp: z.coerce.number().min(1),
+    WaffoNotifyUrl: z.string(),
+    WaffoReturnUrl: z.string(),
+    WaffoPancakeMerchantID: z.string(),
+    WaffoPancakePrivateKey: z.string(),
+    WaffoPancakeReturnURL: z.string(),
+  })
+  .superRefine((values, ctx) => {
+    // max=0 disables the ceiling; otherwise a ceiling below the floor would
+    // silently block every top-up on the wallet page.
+    if (values.MaxTopUp > 0 && values.MaxTopUp < values.MinTopUp) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: error,
+        message:
+          'Maximum top-up must be 0 (unlimited) or at least the minimum top-up',
+        path: ['MaxTopUp'],
       })
     }
-  }),
-  AmountOptions: z.string().superRefine((value, ctx) => {
-    const error = getJsonError(value, (parsed) => Array.isArray(parsed))
-    if (error) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: error,
-      })
-    }
-  }),
-  AmountDiscount: z.string().superRefine((value, ctx) => {
-    const error = getJsonError(
-      value,
-      (parsed) =>
-        !!parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-    )
-    if (error) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: error,
-      })
-    }
-  }),
-  StripeApiSecret: z.string(),
-  StripeWebhookSecret: z.string(),
-  StripePriceId: z.string(),
-  StripeUnitPrice: z.coerce.number().min(0),
-  StripeMinTopUp: z.coerce.number().min(0),
-  StripePromotionCodesEnabled: z.boolean(),
-  CreemApiKey: z.string(),
-  CreemWebhookSecret: z.string(),
-  CreemTestMode: z.boolean(),
-  CreemProducts: z.string().superRefine((value, ctx) => {
-    const error = getJsonError(value, (parsed) => Array.isArray(parsed))
-    if (error) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: error,
-      })
-    }
-  }),
-  WaffoEnabled: z.boolean(),
-  WaffoApiKey: z.string(),
-  WaffoPrivateKey: z.string(),
-  WaffoPublicCert: z.string(),
-  WaffoSandboxPublicCert: z.string(),
-  WaffoSandboxApiKey: z.string(),
-  WaffoSandboxPrivateKey: z.string(),
-  WaffoSandbox: z.boolean(),
-  WaffoMerchantId: z.string(),
-  WaffoCurrency: z.string(),
-  WaffoUnitPrice: z.coerce.number().min(0),
-  WaffoMinTopUp: z.coerce.number().min(1),
-  WaffoNotifyUrl: z.string(),
-  WaffoReturnUrl: z.string(),
-  WaffoPancakeMerchantID: z.string(),
-  WaffoPancakePrivateKey: z.string(),
-  WaffoPancakeReturnURL: z.string(),
-})
+  })
 
 type PaymentFormValues = z.infer<typeof paymentSchema>
 type WaffoFormFieldValues = Omit<WaffoSettingsValues, 'WaffoPayMethods'>
@@ -393,6 +407,7 @@ export function PaymentSettingsSection({
       EpayKey: values.EpayKey.trim(),
       Price: values.Price,
       MinTopUp: values.MinTopUp,
+      MaxTopUp: values.MaxTopUp,
       CustomCallbackAddress: removeTrailingSlash(values.CustomCallbackAddress),
       PayMethods: values.PayMethods.trim(),
       AmountOptions: values.AmountOptions.trim(),
@@ -435,6 +450,7 @@ export function PaymentSettingsSection({
       EpayKey: initialRef.current.EpayKey.trim(),
       Price: initialRef.current.Price,
       MinTopUp: initialRef.current.MinTopUp,
+      MaxTopUp: initialRef.current.MaxTopUp,
       CustomCallbackAddress: removeTrailingSlash(
         initialRef.current.CustomCallbackAddress
       ),
@@ -496,6 +512,13 @@ export function PaymentSettingsSection({
 
     if (sanitized.MinTopUp !== initial.MinTopUp) {
       updates.push({ key: 'MinTopUp', value: sanitized.MinTopUp })
+    }
+
+    if (sanitized.MaxTopUp !== initial.MaxTopUp) {
+      updates.push({
+        key: 'payment_setting.max_topup',
+        value: String(sanitized.MaxTopUp),
+      })
     }
 
     if (sanitized.CustomCallbackAddress !== initial.CustomCallbackAddress) {
@@ -894,6 +917,30 @@ export function PaymentSettingsSection({
                     </FormControl>
                     <FormDescription>
                       {t('Smallest USD amount users can recharge (Epay)')}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='MaxTopUp'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Maximum top-up (USD)')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        step='1'
+                        min={0}
+                        {...safeNumberFieldProps(field)}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'Largest USD amount per single top-up across all gateways. 0 means unlimited'
+                      )}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

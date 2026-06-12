@@ -5,6 +5,7 @@ import "github.com/QuantumNous/new-api/setting/config"
 type PaymentSetting struct {
 	AmountOptions  []int           `json:"amount_options"`
 	AmountDiscount map[int]float64 `json:"amount_discount"` // 充值金额对应的折扣，例如 100 元 0.9 表示 100 元充值享受 9 折优惠
+	MaxTopUp       int             `json:"max_topup"`       // 单次最大充值金额（美元），0 表示不限制
 
 	ComplianceConfirmed    bool   `json:"compliance_confirmed"`
 	ComplianceTermsVersion string `json:"compliance_terms_version"`
@@ -28,6 +29,14 @@ func init() {
 
 func GetPaymentSetting() *PaymentSetting {
 	return &paymentSetting
+}
+
+// GetMaxTopUp 返回单次最大充值金额（美元），0 表示不限制
+func GetMaxTopUp() int {
+	if paymentSetting.MaxTopUp < 0 {
+		return 0
+	}
+	return paymentSetting.MaxTopUp
 }
 
 func IsPaymentComplianceConfirmed() bool {

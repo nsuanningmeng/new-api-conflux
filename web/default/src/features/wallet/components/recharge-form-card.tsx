@@ -2,6 +2,11 @@ import { useState, useEffect } from 'react'
 import { Link } from '@tanstack/react-router'
 import { Gift, ExternalLink, Loader2, Receipt, WalletCards } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import {
+  formatCurrencyFromUSD,
+  formatLocalCurrencyAmount,
+  isCurrencyDisplayEnabled,
+} from '@/lib/currency'
 import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -19,10 +24,10 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import {
-  formatCurrency,
   getDiscountLabel,
   getPaymentIcon,
   getMinTopupAmount,
+  getMaxTopupAmount,
   calculatePresetPricing,
 } from '../lib'
 import type {
@@ -52,7 +57,6 @@ interface RechargeFormCardProps {
   topupLink?: string
   loading?: boolean
   priceRatio?: number
-  usdExchangeRate?: number
   onOpenBilling?: () => void
   creemProducts?: CreemProduct[]
   enableCreemTopup?: boolean
@@ -82,7 +86,6 @@ export function RechargeFormCard({
   topupLink,
   loading,
   priceRatio = 1,
-  usdExchangeRate = 1,
   onOpenBilling,
   creemProducts,
   enableCreemTopup,
@@ -122,6 +125,9 @@ export function RechargeFormCard({
   const hasWaffoPaymentMethods =
     Array.isArray(waffoPayMethods) && waffoPayMethods.length > 0
   const minTopup = getMinTopupAmount(topupInfo)
+  // Single-topup ceiling configured by the admin; 0 means unlimited.
+  const maxTopup = getMaxTopupAmount(topupInfo)
+  const overMax = maxTopup > 0 && topupAmount > maxTopup
   const redemptionEnabled = topupInfo?.enable_redemption !== false
 
   if (loading) {
@@ -241,17 +247,12 @@ export function RechargeFormCard({
                         preset.discount ||
                         topupInfo?.discount?.[preset.value] ||
                         1.0
-                      const {
-                        displayValue,
-                        actualPrice,
-                        savedAmount,
-                        hasDiscount,
-                      } = calculatePresetPricing(
-                        preset.value,
-                        priceRatio,
-                        discount,
-                        usdExchangeRate
-                      )
+                      const { actualPrice, savedAmount, hasDiscount } =
+                        calculatePresetPricing(
+                          preset.value,
+                          priceRatio,
+                          discount
+                        )
                       return (
                         <Button
                           key={index}
@@ -266,7 +267,10 @@ export function RechargeFormCard({
                         >
                           <div className='flex w-full items-center justify-between'>
                             <div className='text-base font-semibold sm:text-lg'>
-                              {formatNumber(displayValue)}
+                              {/* TOKENS display mode: preset values are already token counts */}
+                              {isCurrencyDisplayEnabled()
+                                ? formatCurrencyFromUSD(preset.value)
+                                : formatNumber(preset.value)}
                             </div>
                             {hasDiscount && (
                               <div className='text-xs font-medium text-green-600'>
@@ -275,11 +279,17 @@ export function RechargeFormCard({
                             )}
                           </div>
                           <div className='text-muted-foreground mt-1.5 w-full text-xs sm:mt-2'>
-                            Pay {formatCurrency(actualPrice)}
+                            {t('Pay {{amount}}', {
+                              amount: formatLocalCurrencyAmount(actualPrice),
+                            })}
                             {hasDiscount && savedAmount > 0 && (
                               <span className='text-green-600'>
                                 {' '}
-                                • Save {formatCurrency(savedAmount)}
+                                •{' '}
+                                {t('Save {{amount}}', {
+                                  amount:
+                                    formatLocalCurrencyAmount(savedAmount),
+                                })}
                               </span>
                             )}
                           </div>
@@ -304,7 +314,16 @@ export function RechargeFormCard({
                     value={localAmount}
                     onChange={(e) => handleAmountChange(e.target.value)}
                     min={minTopup}
-                    placeholder={`Minimum ${minTopup}`}
+                    max={maxTopup > 0 ? maxTopup : undefined}
+                    aria-invalid={overMax || undefined}
+                    placeholder={
+                      maxTopup > 0
+                        ? t('Enter an amount between {{min}} and {{max}}', {
+                            min: minTopup,
+                            max: maxTopup,
+                          })
+                        : t('Minimum {{amount}}', { amount: minTopup })
+                    }
                     className='h-9 text-base sm:h-10 sm:text-lg'
                   />
                   <div className='bg-muted/30 flex min-h-9 items-center justify-between gap-2 rounded-md border px-3 lg:min-w-52'>
@@ -315,11 +334,28 @@ export function RechargeFormCard({
                       <Skeleton className='h-5 w-16' />
                     ) : (
                       <span className='text-sm font-semibold'>
-                        {formatCurrency(paymentAmount)}
+                        {formatLocalCurrencyAmount(paymentAmount)}
                       </span>
                     )}
                   </div>
                 </div>
+                {maxTopup > 0 && (
+                  <p
+                    className={cn(
+                      'text-xs',
+                      overMax ? 'text-destructive' : 'text-muted-foreground'
+                    )}
+                  >
+                    {overMax
+                      ? t('Maximum single top-up amount: {{amount}}', {
+                          amount: maxTopup,
+                        })
+                      : t('Single top-up limit: {{min}} - {{max}}', {
+                          min: minTopup,
+                          max: maxTopup,
+                        })}
+                  </p>
+                )}
               </div>
 
               <div className='space-y-2.5 sm:space-y-3'>
@@ -337,7 +373,9 @@ export function RechargeFormCard({
                           key={method.type}
                           variant='outline'
                           onClick={() => onPaymentMethodSelect(method)}
-                          disabled={disabled || !!paymentLoading || !agreed}
+                          disabled={
+                            disabled || overMax || !!paymentLoading || !agreed
+                          }
                           className='h-9 min-w-0 justify-start gap-2 rounded-lg px-3'
                         >
                           {paymentLoading === method.type ? (
@@ -399,7 +437,9 @@ export function RechargeFormCard({
                             key={`${method.name}-${index}`}
                             variant='outline'
                             onClick={() => onWaffoMethodSelect(method, index)}
-                            disabled={belowMin || !!paymentLoading || !agreed}
+                            disabled={
+                              belowMin || overMax || !!paymentLoading || !agreed
+                            }
                             className='h-9 min-w-0 justify-start gap-2 rounded-lg px-3'
                           >
                             {paymentLoading === loadingKey ? (

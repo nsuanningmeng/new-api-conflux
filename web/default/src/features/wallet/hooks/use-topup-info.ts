@@ -4,6 +4,7 @@ import {
   generatePresetAmounts,
   mergePresetAmounts,
   getMinTopupAmount,
+  getMaxTopupAmount,
 } from '../lib'
 import type {
   TopupInfo,
@@ -176,16 +177,22 @@ export function useTopupInfo() {
 
       setTopupInfo(processedData)
 
+      // Hide presets above the single-topup ceiling so users cannot pick
+      // an amount the backend will reject anyway.
+      const maxTopup = getMaxTopupAmount(processedData)
+      const withinLimit = (preset: PresetAmount) =>
+        maxTopup === 0 || preset.value <= maxTopup
+
       if (processedData.amount_options.length > 0) {
         const customPresets = mergePresetAmounts(
           processedData.amount_options,
           processedData.discount || {}
         )
-        setPresetAmounts(customPresets)
+        setPresetAmounts(customPresets.filter(withinLimit))
       } else {
         const minTopup = getMinTopupAmount(processedData)
         const defaultPresets = generatePresetAmounts(minTopup)
-        setPresetAmounts(defaultPresets)
+        setPresetAmounts(defaultPresets.filter(withinLimit))
       }
     } catch (err) {
       // eslint-disable-next-line no-console

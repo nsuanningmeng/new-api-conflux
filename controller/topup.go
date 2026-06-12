@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
@@ -131,9 +132,11 @@ func GetTopUpInfo(c *gin.Context) {
 			}
 			return nil
 		}(),
-		"creem_products":          setting.CreemProducts,
-		"pay_methods":             payMethods,
-		"min_topup":               operation_setting.MinTopUp,
+		"creem_products": setting.CreemProducts,
+		"pay_methods":    payMethods,
+		"min_topup":      operation_setting.MinTopUp,
+		// 与各网关校验保持同一单位：TOKENS 展示模式下为 token 数量，否则为美元
+		"max_topup":               getMaxTopup(),
 		"stripe_min_topup":        setting.StripeMinTopUp,
 		"waffo_min_topup":         setting.WaffoMinTopUp,
 		"waffo_pancake_min_topup": setting.WaffoPancakeMinTopUp,
@@ -208,6 +211,37 @@ func getMinTopup() int64 {
 	return int64(minTopup)
 }
 
+// getMaxTopup 返回单次最大充值数量，0 表示不限制；
+// 与 getMinTopup 一致，TOKENS 展示模式下按 QuotaPerUnit 换算
+func getMaxTopup() int64 {
+	maxTopup := operation_setting.GetMaxTopUp()
+	if maxTopup <= 0 {
+		return 0
+	}
+	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
+		dMaxTopup := decimal.NewFromInt(int64(maxTopup))
+		dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
+		maxTopup = int(dMaxTopup.Mul(dQuotaPerUnit).IntPart())
+	}
+	return int64(maxTopup)
+}
+
+// checkMaxTopupLimit 校验单次充值上限（所有支付网关共用），超限时返回本地化错误提示；空字符串表示通过
+func checkMaxTopupLimit(c *gin.Context, amount int64) string {
+	if maxTopup := getMaxTopup(); maxTopup > 0 && amount > maxTopup {
+		return i18n.T(c, i18n.MsgPaymentAmountExceedsMax, map[string]any{"Max": maxTopup})
+	}
+	return ""
+}
+
+// checkTopupAmountLimits 校验单次充值数量上下限，返回错误提示；空字符串表示通过
+func checkTopupAmountLimits(c *gin.Context, amount int64) string {
+	if amount < getMinTopup() {
+		return fmt.Sprintf("充值数量不能小于 %d", getMinTopup())
+	}
+	return checkMaxTopupLimit(c, amount)
+}
+
 func RequestEpay(c *gin.Context) {
 	var req EpayRequest
 	err := c.ShouldBindJSON(&req)
@@ -215,8 +249,8 @@ func RequestEpay(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
 		return
 	}
-	if req.Amount < getMinTopup() {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": fmt.Sprintf("充值数量不能小于 %d", getMinTopup())})
+	if errMsg := checkTopupAmountLimits(c, req.Amount); errMsg != "" {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": errMsg})
 		return
 	}
 
@@ -441,8 +475,8 @@ func RequestAmount(c *gin.Context) {
 		return
 	}
 
-	if req.Amount < getMinTopup() {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": fmt.Sprintf("充值数量不能小于 %d", getMinTopup())})
+	if errMsg := checkTopupAmountLimits(c, req.Amount); errMsg != "" {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": errMsg})
 		return
 	}
 	id := c.GetInt("id")

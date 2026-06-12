@@ -139,6 +139,14 @@ export function getMinTopupAmount(topupInfo: TopupInfo | null): number {
 }
 
 /**
+ * Get maximum single topup amount from topup info (0 = unlimited)
+ */
+export function getMaxTopupAmount(topupInfo: TopupInfo | null): number {
+  const max = topupInfo?.max_topup
+  return typeof max === 'number' && Number.isFinite(max) && max > 0 ? max : 0
+}
+
+/**
  * Generate preset amounts based on minimum topup
  */
 export function generatePresetAmounts(minAmount: number): PresetAmount[] {

@@ -121,6 +121,12 @@ export interface TopupInfo {
   pay_methods: PaymentMethod[]
   /** Minimum topup amount for online topup */
   min_topup: number
+  /**
+   * Maximum single topup amount across all gateways (0 = unlimited).
+   * Sent by the backend in the same units users type (tokens when the
+   * quota display type is TOKENS, otherwise USD), matching server validation.
+   */
+  max_topup?: number
   /** Minimum topup amount for Stripe */
   stripe_min_topup: number
   /** Preset amount options */

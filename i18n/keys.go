@@ -148,6 +148,7 @@ const (
 	MsgPaymentCreateFailed       = "payment.create_failed"
 	MsgPaymentStartFailed        = "payment.start_failed"
 	MsgPaymentAmountTooLow       = "payment.amount_too_low"
+	MsgPaymentAmountExceedsMax   = "payment.amount_exceeds_max"
 	MsgPaymentStripeNotConfig    = "payment.stripe_not_configured"
 	MsgPaymentWebhookNotConfig   = "payment.webhook_not_configured"
 	MsgPaymentPriceIdNotConfig   = "payment.price_id_not_configured"
