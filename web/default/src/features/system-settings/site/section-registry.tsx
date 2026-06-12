@@ -41,7 +41,6 @@ const SITE_SECTIONS = [
   {
     id: 'seo',
     titleKey: 'SEO Settings',
-    descriptionKey: 'Configure website SEO title, description and keywords',
     build: (settings: SiteSettings) => (
       <SeoSettingsSection
         defaultValues={{

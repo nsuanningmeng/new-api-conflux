@@ -186,7 +186,6 @@ const BILLING_SECTIONS = [
   {
     id: 'card-shop',
     titleKey: 'Card Shop',
-    descriptionKey: 'Manage card shop products and inventory',
     build: (_settings: BillingSettings) => (
       <CardShopAdminSection />
     ),
@@ -194,7 +193,6 @@ const BILLING_SECTIONS = [
   {
     id: 'card-shop-analytics',
     titleKey: 'Card Shop Analytics',
-    descriptionKey: 'View card shop revenue and order analytics',
     build: (_settings: BillingSettings) => (
       <CardShopAnalyticsSection />
     ),
