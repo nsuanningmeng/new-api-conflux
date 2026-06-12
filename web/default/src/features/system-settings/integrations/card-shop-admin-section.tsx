@@ -81,10 +81,10 @@ export function CardShopAdminSection() {
   }
 
   return (
-    <SettingsSection
-      title={t('Card Shop Management')}
-      description={t('Manage products, card secrets and view all orders')}
-    >
+    <SettingsSection title={t('Card Shop Management')}>
+      <p className='text-muted-foreground mb-4 text-sm'>
+        {t('Manage products, card secrets and view all orders')}
+      </p>
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="mb-4">
           <TabsTrigger value="products">

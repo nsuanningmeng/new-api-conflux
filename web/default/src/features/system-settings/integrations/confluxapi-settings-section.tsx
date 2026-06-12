@@ -129,10 +129,10 @@ export function ConfluxAPISettingsSection(props: Props) {
   }
 
   return (
-    <SettingsSection
-      title={t('ConfluxAPI Payment Gateway')}
-      description={t('Configure ConfluxAPI cross-border payment integration')}
-    >
+    <SettingsSection title={t('ConfluxAPI Payment Gateway')}>
+      <p className='text-muted-foreground mb-4 text-sm'>
+        {t('Configure ConfluxAPI cross-border payment integration')}
+      </p>
       <Alert>
         <AlertDescription className='text-xs'>
           {t(
