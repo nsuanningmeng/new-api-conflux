@@ -328,8 +328,9 @@ func avg(sum int64, count int64) int64 {
 }
 
 func successRate(value counters) float64 {
+	// Zero traffic means nothing failed: read as fully healthy, not 0%.
 	if value.requestCount <= 0 {
-		return 0
+		return 100
 	}
 	return float64(value.successCount) / float64(value.requestCount) * 100
 }

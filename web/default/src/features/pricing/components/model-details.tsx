@@ -32,6 +32,7 @@ import {
   formatThroughput,
   formatUptimePct,
 } from '@/features/performance-metrics/lib/format'
+import { useSuccessThresholds } from '@/features/performance-metrics/lib/use-success-thresholds'
 import { DEFAULT_TOKEN_UNIT, QUOTA_TYPE_VALUES } from '../constants'
 import { usePricingData } from '../hooks/use-pricing-data'
 import {
@@ -188,18 +189,24 @@ function OverviewSummaryGrid(props: { model: PricingModel }) {
     staleTime: 60 * 1000,
   })
 
+  const { green, red, enabled: metricsEnabled } = useSuccessThresholds()
   const groups = metricsQuery.data?.data.groups ?? []
   const successRates = groups
     .map((group) => group.success_rate)
     .filter((rate) => Number.isFinite(rate))
+  // No requests in the window counts as fully healthy — but only when metrics
+  // are enabled AND the query succeeded, so a disabled feature, an in-flight
+  // load, or a failed query still reads as "no data" instead of 100%.
   const successRate =
     successRates.length > 0
       ? successRates.reduce((sum, rate) => sum + rate, 0) / successRates.length
-      : Number.NaN
+      : metricsEnabled && metricsQuery.isSuccess
+        ? 100
+        : Number.NaN
   let successIntent: 'default' | 'warning' | 'success' = 'warning'
-  if (successRate >= 99.9) {
+  if (successRate >= green) {
     successIntent = 'success'
-  } else if (successRate >= 99) {
+  } else if (successRate >= red) {
     successIntent = 'default'
   }
   const tpsValues = groups

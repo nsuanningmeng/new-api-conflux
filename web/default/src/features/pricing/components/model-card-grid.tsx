@@ -46,6 +46,17 @@ export function ModelCardGrid(props: ModelCardGridProps) {
     return map
   }, [perfQuery.data])
 
+  // Zero-traffic models read as 100% healthy, but only once the summary has
+  // loaded with metrics enabled — a disabled feature or a failed query must
+  // not paint every model green.
+  const perfFallback = useMemo<ModelPerfBadgeData | undefined>(
+    () =>
+      perfQuery.data?.data?.enabled
+        ? { avg_latency_ms: 0, avg_tps: 0, success_rate: 100 }
+        : undefined,
+    [perfQuery.data]
+  )
+
   if (props.models.length === 0) {
     return null
   }
@@ -61,7 +72,7 @@ export function ModelCardGrid(props: ModelCardGridProps) {
             priceRate={props.priceRate}
             usdExchangeRate={props.usdExchangeRate}
             showRechargePrice={props.showRechargePrice}
-            perf={perfMap.get(model.model_name || '')}
+            perf={perfMap.get(model.model_name || '') ?? perfFallback}
             onClick={() => props.onModelClick(model.model_name || '')}
           />
         ))}

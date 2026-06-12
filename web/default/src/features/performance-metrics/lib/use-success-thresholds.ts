@@ -11,5 +11,8 @@ export function useSuccessThresholds() {
   return {
     green: query.data?.data.success_threshold_green ?? 99.9,
     red: query.data?.data.success_threshold_red ?? 99.0,
+    // Only true once the summary has loaded AND metrics are enabled — callers
+    // use this to decide whether zero-traffic models may default to 100%.
+    enabled: query.data?.data.enabled === true,
   }
 }

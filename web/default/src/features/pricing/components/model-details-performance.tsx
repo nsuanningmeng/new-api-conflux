@@ -139,7 +139,11 @@ function average(
 
 export function ModelDetailsPerformance(props: { model: PricingModel }) {
   const { t } = useTranslation()
-  const { green: thresholdGreen, red: thresholdRed } = useSuccessThresholds()
+  const {
+    green: thresholdGreen,
+    red: thresholdRed,
+    enabled: metricsEnabled,
+  } = useSuccessThresholds()
   const metricsQuery = useQuery({
     queryKey: ['perf-metrics', props.model.model_name],
     queryFn: () => getPerfMetrics(props.model.model_name, 24),
@@ -170,7 +174,16 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
     return map
   }, [groups])
 
-  if (metricsQuery.isLoading || performances.length === 0) {
+  const hasData = performances.length > 0
+
+  // With metrics disabled there is genuinely no data to show; with metrics
+  // enabled a model without traffic still renders the stat cards at 100%.
+  // A failed query must not read as 100% healthy, so errors keep the placeholder.
+  if (
+    metricsQuery.isLoading ||
+    metricsQuery.isError ||
+    (!hasData && !metricsEnabled)
+  ) {
     return (
       <div className='text-muted-foreground rounded-lg border p-6 text-center text-sm'>
         {t('Performance data is not yet available for this model.')}
@@ -193,7 +206,7 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
     successRates.length > 0
       ? successRates.reduce((sum, value) => sum + value, 0) /
         successRates.length
-      : 0
+      : 100
   const incidentCount = uptimeSeries.reduce((s, p) => s + p.incidents, 0)
   let intent: 'default' | 'warning' | 'success' = 'warning'
   if (successRate >= thresholdGreen) {
@@ -224,107 +237,121 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
           label={t('Success rate')}
           value={formatUptimePct(successRate)}
           hint={
-            incidentCount > 0
-              ? t('{{count}} incidents in the last 24 hours', {
-                  count: incidentCount,
-                })
-              : t('No incidents in the last 24 hours')
+            !hasData
+              ? t('No requests in the last 24 hours')
+              : incidentCount > 0
+                ? t('{{count}} incidents in the last 24 hours', {
+                    count: incidentCount,
+                  })
+                : t('No incidents in the last 24 hours')
           }
           intent={intent}
         />
       </div>
 
-      <section>
-        <SectionHeader
-          icon={HeartPulse}
-          title={t('Per-group performance')}
-          description={t('Average latency, TTFT, TPS, and success rate')}
-        />
-        <div className='overflow-x-auto rounded-lg border'>
-          <Table className='text-sm'>
-            <TableHeader>
-              <TableRow className='hover:bg-transparent'>
-                <TableHead className={headerCellClass}>{t('Group')}</TableHead>
-                <TableHead className={`${headerCellClass} text-right`}>
-                  TPS
-                </TableHead>
-                <TableHead className={`${headerCellClass} text-right`}>
-                  {t('Average TTFT')}
-                </TableHead>
-                <TableHead className={`${headerCellClass} text-right`}>
-                  {t('Average latency')}
-                </TableHead>
-                <TableHead
-                  className={`${headerCellClass} min-w-[180px] text-left`}
-                >
-                  {t('Success rate')}
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {performances.map((perf) => (
-                <TableRow key={perf.group}>
-                  <TableCell className='py-2.5'>
-                    <GroupBadge group={perf.group} size='sm' />
-                  </TableCell>
-                  <TableCell className='py-2.5 text-right font-mono'>
-                    {formatThroughput(perf.avg_tps)}
-                  </TableCell>
-                  <TableCell className='py-2.5 text-right font-mono'>
-                    {formatLatency(perf.avg_ttft_ms)}
-                  </TableCell>
-                  <TableCell className='text-muted-foreground py-2.5 text-right font-mono'>
-                    {formatLatency(perf.avg_latency_ms)}
-                  </TableCell>
-                  <TableCell className='py-2.5'>
-                    <UptimeSparkline
-                      size='sm'
-                      series={uptimeByGroup[perf.group] ?? []}
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+      {!hasData && (
+        <div className='text-muted-foreground rounded-lg border p-6 text-center text-sm'>
+          {t('No requests in the last 24 hours')}
         </div>
-      </section>
+      )}
 
-      <section>
-        <SectionHeader
-          icon={Timer}
-          title={t('Latency trend (last 24h)')}
-          description={t('Average TTFT')}
-        />
-        <LatencyTrendChart series={latencySeries} />
-      </section>
+      {hasData && (
+        <>
+          <section>
+            <SectionHeader
+              icon={HeartPulse}
+              title={t('Per-group performance')}
+              description={t('Average latency, TTFT, TPS, and success rate')}
+            />
+            <div className='overflow-x-auto rounded-lg border'>
+              <Table className='text-sm'>
+                <TableHeader>
+                  <TableRow className='hover:bg-transparent'>
+                    <TableHead className={headerCellClass}>
+                      {t('Group')}
+                    </TableHead>
+                    <TableHead className={`${headerCellClass} text-right`}>
+                      TPS
+                    </TableHead>
+                    <TableHead className={`${headerCellClass} text-right`}>
+                      {t('Average TTFT')}
+                    </TableHead>
+                    <TableHead className={`${headerCellClass} text-right`}>
+                      {t('Average latency')}
+                    </TableHead>
+                    <TableHead
+                      className={`${headerCellClass} min-w-[180px] text-left`}
+                    >
+                      {t('Success rate')}
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {performances.map((perf) => (
+                    <TableRow key={perf.group}>
+                      <TableCell className='py-2.5'>
+                        <GroupBadge group={perf.group} size='sm' />
+                      </TableCell>
+                      <TableCell className='py-2.5 text-right font-mono'>
+                        {formatThroughput(perf.avg_tps)}
+                      </TableCell>
+                      <TableCell className='py-2.5 text-right font-mono'>
+                        {formatLatency(perf.avg_ttft_ms)}
+                      </TableCell>
+                      <TableCell className='text-muted-foreground py-2.5 text-right font-mono'>
+                        {formatLatency(perf.avg_latency_ms)}
+                      </TableCell>
+                      <TableCell className='py-2.5'>
+                        <UptimeSparkline
+                          size='sm'
+                          series={uptimeByGroup[perf.group] ?? []}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </section>
 
-      <section>
-        <SectionHeader
-          icon={HeartPulse}
-          title={t('Availability (last 24h)')}
-          description={
-            incidentCount > 0
-              ? t(
-                  'Request success rate; {{incidents}} incident buckets in the last 24 hours',
-                  {
-                    incidents: incidentCount,
-                  }
-                )
-              : t('Request success rate sampled over the last 24 hours')
-          }
-          accent={
-            incidentCount > 0 ? (
-              <span className='inline-flex items-center gap-1 text-amber-600 dark:text-amber-400'>
-                <AlertTriangle className='size-3.5' />
-                {t('{{count}} incidents', {
-                  count: incidentCount,
-                })}
-              </span>
-            ) : null
-          }
-        />
-        <UptimeTrendChart series={uptimeSeries} />
-      </section>
+          <section>
+            <SectionHeader
+              icon={Timer}
+              title={t('Latency trend (last 24h)')}
+              description={t('Average TTFT')}
+            />
+            <LatencyTrendChart series={latencySeries} />
+          </section>
+
+          <section>
+            <SectionHeader
+              icon={HeartPulse}
+              title={t('Availability (last 24h)')}
+              description={
+                incidentCount > 0
+                  ? t(
+                      'Request success rate; {{incidents}} incident buckets in the last 24 hours',
+                      {
+                        incidents: incidentCount,
+                      }
+                    )
+                  : t('Request success rate sampled over the last 24 hours')
+              }
+              accent={
+                incidentCount > 0 ? (
+                  <span className='inline-flex items-center gap-1 text-amber-600 dark:text-amber-400'>
+                    <AlertTriangle className='size-3.5' />
+                    {t('{{count}} incidents', {
+                      count: incidentCount,
+                    })}
+                  </span>
+                ) : null
+              }
+            />
+            <UptimeTrendChart series={uptimeSeries} />
+          </section>
+        </>
+      )}
     </div>
   )
 }

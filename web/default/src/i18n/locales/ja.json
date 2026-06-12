@@ -2631,6 +2631,7 @@
     "No Redemption Codes Found": "引き換えコードが見つかりません",
     "No related models available for this channel type": "このチャンネルタイプに関連するモデルが利用できません",
     "No release notes provided.": "リリースノートは提供されていません。",
+    "No requests in the last 24 hours": "過去 24 時間にリクエストはありません",
     "No Reset": "リセットなし",
     "No restriction": "制限なし",
     "No results for \"{{query}}\". Try adjusting your search or filters.": "\"{{query}}\" の結果が見つかりません。検索条件やフィルターを調整してみてください。",

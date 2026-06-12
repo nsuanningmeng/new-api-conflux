@@ -35,6 +35,7 @@ func GetPerfMetricsSummary(c *gin.Context) {
 		"success": true,
 		"data": gin.H{
 			"models":                  result.Models,
+			"enabled":                 perf_metrics_setting.GetSetting().Enabled,
 			"success_threshold_green": green,
 			"success_threshold_red":   red,
 		},
