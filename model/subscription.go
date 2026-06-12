@@ -201,6 +201,11 @@ func (p *SubscriptionPlan) NormalizeDefaults() {
 	}
 }
 
+// SubscriptionConfluxAPITradeNoPrefix marks ConfluxAPI subscription orders so
+// the shared ConfluxAPI webhook can route them to subscription completion
+// instead of quota top-up or card-shop delivery.
+const SubscriptionConfluxAPITradeNoPrefix = "SUBCONFLUX-"
+
 // Subscription order (payment -> webhook -> create UserSubscription)
 type SubscriptionOrder struct {
 	Id     int     `json:"id"`

@@ -382,6 +382,16 @@ func ConfluxAPINotify(c *gin.Context) {
 	}
 
 	isCardShopOrder := strings.HasPrefix(paymentData.MchOrderNo, model.CardShopTradeNoPrefix)
+	isSubscriptionOrder := strings.HasPrefix(paymentData.MchOrderNo, model.SubscriptionConfluxAPITradeNoPrefix)
+	// Subscriptions, like card delivery, are higher-value irreversible actions:
+	// reject stale/unidentified notifies. The DB transaction in
+	// CompleteSubscriptionOrder is idempotent, so no in-memory replay set is needed.
+	if isSubscriptionOrder {
+		if !isConfluxAPINotifyFresh(notifyReq.Timestamp) || strings.TrimSpace(notifyReq.NotifyID) == "" {
+			c.String(http.StatusUnauthorized, "fail")
+			return
+		}
+	}
 	cardShopReplayKey := ""
 	cardShopProcessed := false
 	if isCardShopOrder {
@@ -422,6 +432,15 @@ func ConfluxAPINotify(c *gin.Context) {
 			cardShopProcessed = true
 			break
 		}
+		if isSubscriptionOrder {
+			if err := model.CompleteSubscriptionOrder(paymentData.MchOrderNo, dataRaw, model.PaymentProviderConfluxAPI, model.PaymentMethodConfluxAPI); err != nil {
+				logger.LogError(c.Request.Context(), fmt.Sprintf("ConfluxAPI 订阅订单处理失败 trade_no=%s notify_id=%s client_ip=%s error=%q", paymentData.MchOrderNo, notifyReq.NotifyID, c.ClientIP(), err.Error()))
+				c.String(http.StatusInternalServerError, "fail")
+				return
+			}
+			logger.LogInfo(c.Request.Context(), fmt.Sprintf("ConfluxAPI 订阅订单处理成功 trade_no=%s notify_id=%s", paymentData.MchOrderNo, notifyReq.NotifyID))
+			break
+		}
 		if err := model.RechargeConfluxAPI(paymentData.MchOrderNo, c.ClientIP()); err != nil {
 			logger.LogError(c.Request.Context(), fmt.Sprintf("ConfluxAPI 充值处理失败 trade_no=%s notify_id=%s client_ip=%s error=%q", paymentData.MchOrderNo, notifyReq.NotifyID, c.ClientIP(), err.Error()))
 			c.String(http.StatusInternalServerError, "fail")
@@ -435,6 +454,15 @@ func ConfluxAPINotify(c *gin.Context) {
 				return
 			}
 			cardShopProcessed = true
+			break
+		}
+		if isSubscriptionOrder {
+			if err := model.ExpireSubscriptionOrder(paymentData.MchOrderNo, model.PaymentProviderConfluxAPI); err != nil &&
+				err != model.ErrPaymentMethodMismatch && err != model.ErrSubscriptionOrderNotFound {
+				logger.LogError(c.Request.Context(), fmt.Sprintf("ConfluxAPI 标记失败订阅订单失败 trade_no=%s notify_id=%s error=%q", paymentData.MchOrderNo, notifyReq.NotifyID, err.Error()))
+				c.String(http.StatusInternalServerError, "fail")
+				return
+			}
 			break
 		}
 		if err := model.UpdatePendingTopUpStatus(paymentData.MchOrderNo, model.PaymentProviderConfluxAPI, common.TopUpStatusFailed); err != nil &&

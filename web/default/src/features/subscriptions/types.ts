@@ -82,6 +82,10 @@ export interface SubscriptionPayResponse {
     pay_link?: string
     // Waffo Pancake / Creem hosted checkout URL.
     checkout_url?: string
+    // ConfluxAPI hosted checkout / payment URL.
+    payment_url?: string
+    qr_code?: string
+    flow_order_no?: string
     // Pancake-only: order metadata + self-service buyer session token,
     // surfaced for future flows (refund / cancel from new-api's own UI).
     session_id?: string

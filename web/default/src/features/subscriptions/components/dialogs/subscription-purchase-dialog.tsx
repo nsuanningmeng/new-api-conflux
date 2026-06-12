@@ -18,11 +18,13 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { Dialog } from '@/components/dialog'
 import { GroupBadge } from '@/components/group-badge'
+import { isSafeHttpPaymentUrl } from '@/lib/utils'
 import {
   paySubscriptionStripe,
   paySubscriptionCreem,
   paySubscriptionEpay,
   paySubscriptionWaffoPancake,
+  paySubscriptionConfluxAPI,
   paySubscriptionBalance,
 } from '../../api'
 import { formatDuration, formatResetPeriod } from '../../lib'
@@ -40,6 +42,7 @@ interface Props {
   enableStripe?: boolean
   enableCreem?: boolean
   enableWaffoPancake?: boolean
+  enableConfluxAPI?: boolean
   enableOnlineTopUp?: boolean
   epayMethods?: PaymentMethod[]
   purchaseLimit?: number
@@ -69,9 +72,12 @@ export function SubscriptionPurchaseDialog(props: Props) {
   const hasCreem = props.enableCreem && !!plan.creem_product_id
   const hasWaffoPancake =
     props.enableWaffoPancake && !!plan.waffo_pancake_product_id
+  // ConfluxAPI charges the plan price directly — no per-plan product id needed.
+  const hasConfluxAPI = !!props.enableConfluxAPI
   const hasEpay =
     props.enableOnlineTopUp && (props.epayMethods || []).length > 0
-  const hasAnyPayment = hasStripe || hasCreem || hasWaffoPancake || hasEpay
+  const hasAnyPayment =
+    hasStripe || hasCreem || hasWaffoPancake || hasConfluxAPI || hasEpay
   const selectedEpayMethodLabel =
     (props.epayMethods || []).find((m) => m.type === selectedEpayMethod)
       ?.name ||
@@ -147,6 +153,34 @@ export function SubscriptionPurchaseDialog(props: Props) {
       if (res.message === 'success' && res.data?.checkout_url) {
         toast.success(t('Redirecting to payment page...'))
         window.location.href = res.data.checkout_url
+      } else {
+        toast.error(
+          res.message && res.message !== 'success'
+            ? res.message
+            : t('Payment request failed')
+        )
+      }
+    } catch {
+      toast.error(t('Payment request failed'))
+    } finally {
+      setPaying(false)
+    }
+  }
+
+  // In-tab redirect (not window.open): user-gesture context is lost across the
+  // await, so a popup would be blocked. Mirrors the wallet ConfluxAPI flow.
+  const handlePayConfluxAPI = async () => {
+    setPaying(true)
+    try {
+      const res = await paySubscriptionConfluxAPI({ plan_id: plan.id })
+      const url = res.data?.checkout_url || res.data?.payment_url
+      if (res.message === 'success' && url) {
+        if (!isSafeHttpPaymentUrl(url)) {
+          toast.error(t('Invalid payment redirect URL'))
+          return
+        }
+        toast.success(t('Redirecting to payment page...'))
+        window.location.assign(url)
       } else {
         toast.error(
           res.message && res.message !== 'success'
@@ -348,7 +382,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
             <p className='text-muted-foreground text-xs'>
               {t('Select payment method')}
             </p>
-            {(hasStripe || hasCreem || hasWaffoPancake) && (
+            {(hasStripe || hasCreem || hasWaffoPancake || hasConfluxAPI) && (
               <div className='grid grid-cols-2 gap-2 sm:flex'>
                 {hasStripe && (
                   <Button
@@ -378,6 +412,16 @@ export function SubscriptionPurchaseDialog(props: Props) {
                     disabled={paying || limitReached}
                   >
                     Waffo Pancake
+                  </Button>
+                )}
+                {hasConfluxAPI && (
+                  <Button
+                    variant='outline'
+                    className='flex-1'
+                    onClick={handlePayConfluxAPI}
+                    disabled={paying || limitReached}
+                  >
+                    Conflux
                   </Button>
                 )}
               </div>
