@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/QuantumNous/new-api/common"
 	"gorm.io/gorm"
@@ -70,15 +71,17 @@ type CardOrder struct {
 	TradeNo   string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
 	Amount    int64   `json:"amount"`
 	Money     float64 `json:"money"`
-	// Composite index (create_time, status): every analytics query filters on
-	// the create_time range, and 4 of them also filter status — create_time
-	// leads so all queries benefit from the range scan.
-	Status         string `json:"status" gorm:"type:varchar(20);default:'pending';index:idx_cardorder_created_status,priority:2"`
+	// Two composite indexes lead with the column each query filters first:
+	//   idx_cardorder_created_status (create_time, status) — analytics range scans
+	//   idx_cardorder_status_expires (status, expires_at)  — expiry sweep seeks
+	//     pending orders directly (few/transient) then ranges on expires_at,
+	//     instead of scanning every historical order by expires_at.
+	Status         string `json:"status" gorm:"type:varchar(20);default:'pending';index:idx_cardorder_created_status,priority:2;index:idx_cardorder_status_expires,priority:1"`
 	CardID         int64  `json:"card_id" gorm:"default:0"`
 	ExpectedAmount int64  `json:"expected_amount" gorm:"default:0"`
 	Currency       string `json:"currency" gorm:"type:varchar(16);default:''"`
 	FlowOrderNo    string `json:"flow_order_no" gorm:"type:varchar(255);default:''"`
-	ExpiresAt      int64  `json:"expires_at" gorm:"index;default:0"`
+	ExpiresAt      int64  `json:"expires_at" gorm:"index:idx_cardorder_status_expires,priority:2;default:0"`
 	ProductName    string `json:"product_name" gorm:"type:varchar(255);default:''"`
 	CreateTime     int64  `json:"create_time" gorm:"index:idx_cardorder_created_status,priority:1"`
 	CompleteTime   int64  `json:"complete_time"`
@@ -209,10 +212,31 @@ func GetProductByID(id int64) (*Product, error) {
 }
 
 func GetAllEnabledProducts() ([]*Product, error) {
-	_ = ReleaseExpiredCardShopOrders()
+	maybeReleaseExpiredCardShopOrders()
 	var products []*Product
 	err := DB.Where("enabled = ? AND stock > 0", true).Order("sort_order desc, id desc").Find(&products).Error
 	return products, err
+}
+
+var lastCardShopExpiryRelease atomic.Int64
+
+const cardShopExpiryReleaseThrottleSeconds int64 = 60
+
+// maybeReleaseExpiredCardShopOrders runs the expiry sweep at most once per
+// throttle window. The public product list calls this on every request; a
+// burst of shoppers would otherwise each open a locking transaction. CAS
+// ensures only one goroutine runs the sweep per window. Stock from an
+// abandoned order is freed within the window (well under the 30-min TTL).
+func maybeReleaseExpiredCardShopOrders() {
+	now := common.GetTimestamp()
+	last := lastCardShopExpiryRelease.Load()
+	if now-last < cardShopExpiryReleaseThrottleSeconds {
+		return
+	}
+	if !lastCardShopExpiryRelease.CompareAndSwap(last, now) {
+		return
+	}
+	_ = ReleaseExpiredCardShopOrders()
 }
 
 func GetAllProducts() ([]*Product, error) {
