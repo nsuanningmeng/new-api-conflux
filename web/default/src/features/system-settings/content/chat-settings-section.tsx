@@ -3,7 +3,6 @@ import * as z from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useTranslation } from 'react-i18next'
-import { Button } from '@/components/ui/button'
 import {
   Form,
   FormControl,
@@ -15,6 +14,8 @@ import {
 } from '@/components/ui/form'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { SettingsForm } from '../components/settings-form-layout'
+import { SettingsPageFormActions } from '../components/settings-page-context'
 import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
 import { ChatSettingsVisualEditor } from './chat-settings-visual-editor'
@@ -107,13 +108,15 @@ export function ChatSettingsSection({
   }
 
   return (
-    <SettingsSection
-      title={t('Chat Presets')}
-      description={t('Configure predefined chat links surfaced to end users.')}
-    >
+    <SettingsSection title={t('Chat Presets')}>
       <Form {...form}>
         {/* eslint-disable-next-line react-hooks/refs */}
-        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
+        <SettingsForm onSubmit={form.handleSubmit(onSubmit)}>
+          <SettingsPageFormActions
+            onSave={form.handleSubmit(onSubmit)}
+            isSaving={updateOption.isPending}
+            saveLabel='Save chat settings'
+          />
           <Tabs
             value={editMode}
             onValueChange={(value) => setEditMode(value as 'visual' | 'json')}
@@ -168,11 +171,7 @@ export function ChatSettingsSection({
               />
             </TabsContent>
           </Tabs>
-
-          <Button type='submit' disabled={updateOption.isPending}>
-            {updateOption.isPending ? t('Saving...') : t('Save chat settings')}
-          </Button>
-        </form>
+        </SettingsForm>
       </Form>
     </SettingsSection>
   )

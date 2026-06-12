@@ -9,9 +9,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { DataTableColumnHeader } from '@/components/data-table/column-header'
+import { DataTableColumnHeader } from '@/components/data-table'
 import { GroupBadge } from '@/components/group-badge'
-import { StatusBadge } from '@/components/status-badge'
+import { ProviderBadge } from '@/components/provider-badge'
+import { StatusBadge, StatusBadgeList } from '@/components/status-badge'
+import { TableId } from '@/components/table-id'
 import {
   getModelStatusConfig,
   getNameRuleConfig,
@@ -22,6 +24,12 @@ import type { Model, Vendor } from '../types'
 import { DataTableRowActions } from './data-table-row-actions'
 import { DescriptionCell } from './description-cell'
 
+function getCompactModelIcon(iconKey: string) {
+  const baseIconKey = iconKey.split('.')[0]
+
+  return getLobeIcon(`${baseIconKey}.Avatar.type={'platform'}`, 20)
+}
+
 /**
  * Render limited items with "and X more" indicator
  */
@@ -29,25 +37,12 @@ function renderLimitedItems(
   items: React.ReactNode[],
   maxDisplay: number = 2
 ): React.ReactNode {
-  if (items.length === 0)
-    return <span className='text-muted-foreground text-xs'>-</span>
-
-  const displayed = items.slice(0, maxDisplay)
-  const remaining = items.length - maxDisplay
-
   return (
-    <div className='flex max-w-full items-center gap-1 overflow-x-auto'>
-      {displayed}
-      {remaining > 0 && (
-        <StatusBadge
-          label={`+${remaining}`}
-          variant='neutral'
-          size='sm'
-          copyable={false}
-          className='flex-shrink-0'
-        />
-      )}
-    </div>
+    <StatusBadgeList
+      items={items}
+      max={maxDisplay}
+      renderItem={(item) => item}
+    />
   )
 }
 
@@ -100,15 +95,7 @@ export function useModelsColumns(vendors: Vendor[] = []): ColumnDef<Model>[] {
       ),
       cell: ({ row }) => {
         const id = row.getValue('id') as number
-        return (
-          <StatusBadge
-            label={String(id)}
-            variant='neutral'
-            copyText={String(id)}
-            size='sm'
-            className='font-mono'
-          />
-        )
+        return <TableId value={id} />
       },
       size: 80,
     },
@@ -125,9 +112,13 @@ export function useModelsColumns(vendors: Vendor[] = []): ColumnDef<Model>[] {
           vendorMap[model.vendor_id || 0]?.icon ||
           model.model_name?.[0] ||
           'N'
-        const icon = getLobeIcon(iconKey, 20)
+        const icon = getCompactModelIcon(iconKey)
 
-        return <div className='flex items-center justify-center'>{icon}</div>
+        return (
+          <div className='ms-1 flex size-5 items-center justify-center overflow-hidden'>
+            {icon}
+          </div>
+        )
       },
       size: 70,
       enableSorting: false,
@@ -232,7 +223,6 @@ export function useModelsColumns(vendors: Vendor[] = []): ColumnDef<Model>[] {
           <StatusBadge
             label={config.label}
             variant={config.variant}
-            showDot={config.showDot}
             size='sm'
             copyable={false}
           />
@@ -262,18 +252,7 @@ export function useModelsColumns(vendors: Vendor[] = []): ColumnDef<Model>[] {
           return <span className='text-muted-foreground text-xs'>-</span>
         }
 
-        const icon = vendor.icon ? getLobeIcon(vendor.icon, 14) : null
-
-        return (
-          <div className='flex items-center gap-1.5'>
-            {icon}
-            <StatusBadge
-              label={vendor.name}
-              autoColor={vendor.name}
-              size='sm'
-            />
-          </div>
-        )
+        return <ProviderBadge iconKey={vendor.icon} label={vendor.name} />
       },
       filterFn: (row, id, value) => {
         if (!value || value.length === 0 || value.includes('all')) return true

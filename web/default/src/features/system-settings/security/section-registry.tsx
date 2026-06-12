@@ -8,7 +8,6 @@ const SECURITY_SECTIONS = [
   {
     id: 'rate-limit',
     titleKey: 'Rate Limiting',
-    descriptionKey: 'Configure model request rate limiting',
     build: (settings: SecuritySettings) => (
       <RateLimitSection
         defaultValues={{
@@ -26,7 +25,6 @@ const SECURITY_SECTIONS = [
   {
     id: 'sensitive-words',
     titleKey: 'Sensitive Words',
-    descriptionKey: 'Configure sensitive word filtering',
     build: (settings: SecuritySettings) => (
       <SensitiveWordsSection
         defaultValues={{
@@ -40,7 +38,6 @@ const SECURITY_SECTIONS = [
   {
     id: 'ssrf',
     titleKey: 'SSRF Protection',
-    descriptionKey: 'Configure SSRF (Server-Side Request Forgery) protection',
     build: (settings: SecuritySettings) => (
       <SSRFSection
         defaultValues={{
@@ -80,3 +77,4 @@ export const SECURITY_SECTION_IDS = securityRegistry.sectionIds
 export const SECURITY_DEFAULT_SECTION = securityRegistry.defaultSection
 export const getSecuritySectionNavItems = securityRegistry.getSectionNavItems
 export const getSecuritySectionContent = securityRegistry.getSectionContent
+export const getSecuritySectionMeta = securityRegistry.getSectionMeta

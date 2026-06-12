@@ -3,8 +3,9 @@ import { Eye, Info, Pencil, Settings2, Timer, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatTimestampToDate } from '@/lib/format'
 import { Button } from '@/components/ui/button'
-import { DataTableColumnHeader } from '@/components/data-table/column-header'
+import { DataTableColumnHeader } from '@/components/data-table'
 import { StatusBadge } from '@/components/status-badge'
+import { TableId } from '@/components/table-id'
 import { getDeploymentStatusConfig } from '../constants'
 import {
   formatRemainingMinutes,
@@ -32,15 +33,7 @@ export function useDeploymentsColumns(opts: {
       ),
       cell: ({ row }) => {
         const id = row.original.id
-        return (
-          <StatusBadge
-            label={String(id)}
-            variant='neutral'
-            copyText={String(id)}
-            size='sm'
-            className='font-mono'
-          />
-        )
+        return <TableId value={id} />
       },
       size: 120,
     },
@@ -82,7 +75,6 @@ export function useDeploymentsColumns(opts: {
           <StatusBadge
             label={config.label}
             variant={config.variant}
-            showDot={config.showDot}
             size='sm'
             copyable={false}
           />

@@ -33,6 +33,13 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  SideDrawerSection,
+  sideDrawerContentClassName,
+  sideDrawerFooterClassName,
+  sideDrawerFormClassName,
+  sideDrawerHeaderClassName,
+} from '@/components/drawer-layout'
 import { MultiSelect } from '@/components/multi-select'
 import {
   checkClusterNameAvailability,
@@ -357,8 +364,8 @@ export function CreateDeploymentDrawer({
         }
       }}
     >
-      <SheetContent className='flex w-full flex-col sm:max-w-[600px]'>
-        <SheetHeader className='text-start'>
+      <SheetContent className={sideDrawerContentClassName('sm:max-w-[600px]')}>
+        <SheetHeader className={sideDrawerHeaderClassName()}>
           <SheetTitle>{t('Create deployment')}</SheetTitle>
           <SheetDescription>
             {t('Configure and deploy a new container instance.')}
@@ -371,10 +378,10 @@ export function CreateDeploymentDrawer({
             onSubmit={form.handleSubmit((values) =>
               createMutation.mutate(values)
             )}
-            className='flex-1 space-y-6 overflow-y-auto px-4'
+            className={sideDrawerFormClassName()}
           >
             {/* Basic Configuration */}
-            <div className='space-y-4'>
+            <SideDrawerSection>
               <h3 className='text-sm font-medium'>
                 {t('Basic Configuration')}
               </h3>
@@ -417,10 +424,10 @@ export function CreateDeploymentDrawer({
                   </FormItem>
                 )}
               />
-            </div>
+            </SideDrawerSection>
 
             {/* Resource Configuration */}
-            <div className='space-y-4'>
+            <SideDrawerSection>
               <h3 className='text-sm font-medium'>
                 {t('Resource Configuration')}
               </h3>
@@ -586,10 +593,10 @@ export function CreateDeploymentDrawer({
                   )}
                 />
               </div>
-            </div>
+            </SideDrawerSection>
 
             {/* Price Estimation */}
-            <div className='space-y-4'>
+            <SideDrawerSection>
               <h3 className='text-sm font-medium'>{t('Price estimation')}</h3>
               <p className='text-muted-foreground text-xs'>
                 {t('Price estimation description')}
@@ -624,10 +631,10 @@ export function CreateDeploymentDrawer({
                   </FormItem>
                 )}
               />
-            </div>
+            </SideDrawerSection>
 
             {/* Advanced Configuration */}
-            <div className='space-y-4'>
+            <SideDrawerSection>
               <h3 className='text-sm font-medium'>
                 {t('Advanced Configuration')}
               </h3>
@@ -635,7 +642,7 @@ export function CreateDeploymentDrawer({
                 {t('Optional settings for advanced container configuration.')}
               </p>
 
-              <div className='space-y-4'>
+              <div className='flex flex-col gap-4'>
                 <div className='grid gap-4 sm:grid-cols-2'>
                   <FormField
                     control={form.control}
@@ -740,11 +747,11 @@ export function CreateDeploymentDrawer({
                   />
                 </div>
               </div>
-            </div>
+            </SideDrawerSection>
           </form>
         </Form>
 
-        <SheetFooter className='gap-2'>
+        <SheetFooter className={sideDrawerFooterClassName()}>
           <SheetClose render={<Button variant='outline' />}>
             {t('Cancel')}
           </SheetClose>

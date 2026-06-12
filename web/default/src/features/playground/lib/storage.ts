@@ -72,7 +72,6 @@ export function loadMessages(): Message[] | null {
     if (saved) {
       const parsed: unknown = JSON.parse(saved)
       if (!Array.isArray(parsed)) {
-        localStorage.removeItem(STORAGE_KEYS.MESSAGES)
         return null
       }
       const sanitized = sanitizeMessagesOnLoad(parsed as Message[])

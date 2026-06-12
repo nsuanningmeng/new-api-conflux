@@ -94,7 +94,7 @@ export function NavGroup({ title, items }: NavGroupProps) {
  * Navigation badge component
  */
 function NavBadge({ children }: { children: ReactNode }) {
-  return <Badge className='px-1 py-0 text-xs'>{children}</Badge>
+  return <Badge className='shrink-0 px-1 py-0 text-xs'>{children}</Badge>
 }
 
 /**
@@ -109,8 +109,8 @@ function SidebarMenuLink({ item, href }: { item: NavLink; href: string }) {
         tooltip={item.title}
         render={<Link to={item.url} onClick={() => setOpenMobile(false)} />}
       >
-        {item.icon && <item.icon />}
-        <span>{item.title}</span>
+        {item.icon && <item.icon className='shrink-0' />}
+        <span className='min-w-0 flex-1 truncate'>{item.title}</span>
         {item.badge && <NavBadge>{item.badge}</NavBadge>}
       </SidebarMenuButton>
     </SidebarMenuItem>
@@ -152,10 +152,10 @@ function SidebarMenuCollapsible({
         className='group/collapsible-trigger'
         render={<SidebarMenuButton tooltip={item.title} />}
       >
-        {item.icon && <item.icon />}
-        <span>{item.title}</span>
+        {item.icon && <item.icon className='shrink-0' />}
+        <span className='min-w-0 flex-1 truncate'>{item.title}</span>
         {item.badge && <NavBadge>{item.badge}</NavBadge>}
-        <ChevronRight className='ms-auto transition-transform duration-200 group-data-[panel-open]/collapsible-trigger:rotate-90' />
+        <ChevronRight className='ms-auto size-4 shrink-0 transition-transform duration-200 group-data-[panel-open]/collapsible-trigger:rotate-90' />
       </CollapsibleTrigger>
       <CollapsibleContent className='CollapsibleContent'>
         <SidebarMenuSub>
@@ -167,8 +167,8 @@ function SidebarMenuCollapsible({
                   <Link to={subItem.url} onClick={() => setOpenMobile(false)} />
                 }
               >
-                {subItem.icon && <subItem.icon />}
-                <span>{subItem.title}</span>
+                {subItem.icon && <subItem.icon className='shrink-0' />}
+                <span className='min-w-0 flex-1 truncate'>{subItem.title}</span>
                 {subItem.badge && <NavBadge>{subItem.badge}</NavBadge>}
               </SidebarMenuSubButton>
             </SidebarMenuSubItem>
@@ -201,10 +201,10 @@ function SidebarMenuCollapsedDropdown({
             />
           }
         >
-          {item.icon && <item.icon />}
-          <span>{item.title}</span>
+          {item.icon && <item.icon className='shrink-0' />}
+          <span className='min-w-0 flex-1 truncate'>{item.title}</span>
           {item.badge && <NavBadge>{item.badge}</NavBadge>}
-          <ChevronRight className='ms-auto transition-transform duration-200 group-data-[popup-open]/dropdown-trigger:rotate-90' />
+          <ChevronRight className='ms-auto size-4 shrink-0 transition-transform duration-200 group-data-[popup-open]/dropdown-trigger:rotate-90' />
         </DropdownMenuTrigger>
         <DropdownMenuContent side='right' align='start' sideOffset={4}>
           <DropdownMenuGroup>

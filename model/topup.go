@@ -30,6 +30,7 @@ const (
 	PaymentMethodWaffo        = "waffo"
 	PaymentMethodWaffoPancake = "waffo_pancake"
 	PaymentMethodConfluxAPI   = "confluxapi"
+	PaymentMethodBalance      = "balance"
 )
 
 const (
@@ -39,6 +40,7 @@ const (
 	PaymentProviderWaffo        = "waffo"
 	PaymentProviderWaffoPancake = "waffo_pancake"
 	PaymentProviderConfluxAPI   = "confluxapi"
+	PaymentProviderBalance      = "balance"
 )
 
 var (

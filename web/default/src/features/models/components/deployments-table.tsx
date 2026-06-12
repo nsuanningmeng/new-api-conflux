@@ -1,11 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
-import {
-  getCoreRowModel,
-  useReactTable,
-  type VisibilityState,
-} from '@tanstack/react-table'
 import { useMediaQuery } from '@/hooks'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -20,7 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { DataTablePage } from '@/components/data-table'
+import { DataTablePage, useDataTable } from '@/components/data-table'
 import { deleteDeployment, listDeployments, searchDeployments } from '../api'
 import { getDeploymentStatusOptions } from '../constants'
 import { deploymentsQueryKeys } from '../lib'
@@ -149,8 +144,6 @@ export function DeploymentsTable() {
     }
   }
 
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
-
   const columns = useDeploymentsColumns({
     onViewLogs: (id) => {
       setLogsDeploymentId(id)
@@ -179,29 +172,21 @@ export function DeploymentsTable() {
     },
   })
 
-  const table = useReactTable({
+  const { table } = useDataTable({
     data: deployments,
     columns,
-    pageCount: Math.ceil(totalCount / pagination.pageSize),
-    state: {
-      columnFilters,
-      columnVisibility,
-      pagination,
-      globalFilter,
-    },
+    totalCount,
+    columnFilters,
+    pagination,
+    globalFilter,
     onColumnFiltersChange,
-    onColumnVisibilityChange: setColumnVisibility,
     onPaginationChange,
     onGlobalFilterChange,
-    getCoreRowModel: getCoreRowModel(),
     manualPagination: true,
     manualFiltering: true,
+    withSortedRowModel: false,
+    ensurePageInRange,
   })
-
-  const pageCount = table.getPageCount()
-  useEffect(() => {
-    ensurePageInRange(pageCount)
-  }, [ensurePageInRange, pageCount])
 
   const statusFilterOptions = useMemo(() => {
     return [...getDeploymentStatusOptions(t)].map((opt) => ({

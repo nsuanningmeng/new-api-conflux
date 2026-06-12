@@ -274,7 +274,7 @@ function formatCurrencyValue(
     maximumFractionDigits: digits,
   }).format(adjustedValue)
 
-  return `${meta.symbol}${decimal}`
+  return `${meta.symbol} ${decimal}`
 }
 
 /**

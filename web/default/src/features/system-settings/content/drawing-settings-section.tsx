@@ -3,17 +3,21 @@ import * as z from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useTranslation } from 'react-i18next'
-import { Button } from '@/components/ui/button'
 import {
   Form,
   FormControl,
   FormDescription,
   FormField,
-  FormItem,
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
 import { Switch } from '@/components/ui/switch'
+import {
+  SettingsForm,
+  SettingsSwitchContent,
+  SettingsSwitchItem,
+} from '../components/settings-form-layout'
+import { SettingsPageFormActions } from '../components/settings-page-context'
 import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
 
@@ -106,12 +110,14 @@ export function DrawingSettingsSection({
   ]
 
   return (
-    <SettingsSection
-      title={t('Drawing')}
-      description={t('Fine-tune Midjourney integration and guardrails.')}
-    >
+    <SettingsSection title={t('Drawing')}>
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
+        <SettingsForm onSubmit={form.handleSubmit(onSubmit)}>
+          <SettingsPageFormActions
+            onSave={form.handleSubmit(onSubmit)}
+            isSaving={updateOption.isPending}
+            saveLabel='Save drawing settings'
+          />
           <div className='space-y-4'>
             {switches.map((item) => (
               <FormField
@@ -119,11 +125,11 @@ export function DrawingSettingsSection({
                 control={form.control}
                 name={item.name}
                 render={({ field }) => (
-                  <FormItem className='flex flex-row items-start justify-between rounded-lg border p-4'>
-                    <div className='space-y-0.5 pe-4'>
-                      <FormLabel className='text-base'>{item.label}</FormLabel>
+                  <SettingsSwitchItem>
+                    <SettingsSwitchContent>
+                      <FormLabel>{item.label}</FormLabel>
                       <FormDescription>{item.description}</FormDescription>
-                    </div>
+                    </SettingsSwitchContent>
                     <FormControl>
                       <Switch
                         checked={field.value}
@@ -131,18 +137,12 @@ export function DrawingSettingsSection({
                       />
                     </FormControl>
                     <FormMessage />
-                  </FormItem>
+                  </SettingsSwitchItem>
                 )}
               />
             ))}
           </div>
-
-          <Button type='submit' disabled={updateOption.isPending}>
-            {updateOption.isPending
-              ? t('Saving...')
-              : t('Save drawing settings')}
-          </Button>
-        </form>
+        </SettingsForm>
       </Form>
     </SettingsSection>
   )
