@@ -1,6 +1,14 @@
+import { lazy, Suspense } from 'react'
 import { parseCurrencyDisplayType } from '@/lib/currency'
 import { CardShopAdminSection } from '../integrations/card-shop-admin-section'
-import { CardShopAnalyticsSection } from '../integrations/card-shop-analytics-section'
+// Lazy-loaded: pulls in the heavy VChart library, which would otherwise be
+// bundled into the settings route chunk and block first paint for everyone
+// opening billing settings, even those who never view the analytics tab.
+const CardShopAnalyticsSection = lazy(() =>
+  import('../integrations/card-shop-analytics-section').then((m) => ({
+    default: m.CardShopAnalyticsSection,
+  }))
+)
 import { CheckinSettingsSection } from '../general/checkin-settings-section'
 import { PricingSection } from '../general/pricing-section'
 import { QuotaSettingsSection } from '../general/quota-settings-section'
@@ -194,7 +202,13 @@ const BILLING_SECTIONS = [
     id: 'card-shop-analytics',
     titleKey: 'Card Shop Analytics',
     build: (_settings: BillingSettings) => (
-      <CardShopAnalyticsSection />
+      <Suspense
+        fallback={
+          <div className='h-64 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800' />
+        }
+      >
+        <CardShopAnalyticsSection />
+      </Suspense>
     ),
   },
   {

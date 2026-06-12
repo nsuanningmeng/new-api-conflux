@@ -64,21 +64,24 @@ type Card struct {
 }
 
 type CardOrder struct {
-	ID             int64   `json:"id" gorm:"primaryKey;autoIncrement"`
-	UserID         int     `json:"user_id" gorm:"index;not null"`
-	ProductID      int64   `json:"product_id" gorm:"not null"`
-	TradeNo        string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
-	Amount         int64   `json:"amount"`
-	Money          float64 `json:"money"`
-	Status         string  `json:"status" gorm:"type:varchar(20);default:'pending'"`
-	CardID         int64   `json:"card_id" gorm:"default:0"`
-	ExpectedAmount int64   `json:"expected_amount" gorm:"default:0"`
-	Currency       string  `json:"currency" gorm:"type:varchar(16);default:''"`
-	FlowOrderNo    string  `json:"flow_order_no" gorm:"type:varchar(255);default:''"`
-	ExpiresAt      int64   `json:"expires_at" gorm:"index;default:0"`
-	ProductName    string  `json:"product_name" gorm:"type:varchar(255);default:''"`
-	CreateTime     int64   `json:"create_time"`
-	CompleteTime   int64   `json:"complete_time"`
+	ID        int64   `json:"id" gorm:"primaryKey;autoIncrement"`
+	UserID    int     `json:"user_id" gorm:"index;not null"`
+	ProductID int64   `json:"product_id" gorm:"not null"`
+	TradeNo   string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
+	Amount    int64   `json:"amount"`
+	Money     float64 `json:"money"`
+	// Composite index (create_time, status): every analytics query filters on
+	// the create_time range, and 4 of them also filter status — create_time
+	// leads so all queries benefit from the range scan.
+	Status         string `json:"status" gorm:"type:varchar(20);default:'pending';index:idx_cardorder_created_status,priority:2"`
+	CardID         int64  `json:"card_id" gorm:"default:0"`
+	ExpectedAmount int64  `json:"expected_amount" gorm:"default:0"`
+	Currency       string `json:"currency" gorm:"type:varchar(16);default:''"`
+	FlowOrderNo    string `json:"flow_order_no" gorm:"type:varchar(255);default:''"`
+	ExpiresAt      int64  `json:"expires_at" gorm:"index;default:0"`
+	ProductName    string `json:"product_name" gorm:"type:varchar(255);default:''"`
+	CreateTime     int64  `json:"create_time" gorm:"index:idx_cardorder_created_status,priority:1"`
+	CompleteTime   int64  `json:"complete_time"`
 }
 
 // 卡商城三张表使用显式带前缀的表名，避免与上游/运营自定义表潜在冲突。

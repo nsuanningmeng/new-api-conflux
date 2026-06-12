@@ -48,7 +48,12 @@ export function CardShopAnalyticsSection() {
       if (res.data?.message !== 'success') throw new Error(res.data?.data || 'Failed to fetch analytics')
       return res.data.data as AnalyticsData
     },
-    refetchInterval: 30000,
+    // Each fetch runs several aggregate scans server-side; analytics need not be
+    // real-time. Poll once a minute, only while the tab is visible, and treat
+    // data as fresh in between so re-mounts don't refetch needlessly.
+    refetchInterval: 60000,
+    refetchIntervalInBackground: false,
+    staleTime: 60000,
   })
 
   const barSpec = useMemo(() => {

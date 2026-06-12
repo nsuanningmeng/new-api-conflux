@@ -7,13 +7,13 @@ import (
 )
 
 type CardShopAnalyticsResult struct {
-	TotalRevenue      int64                       `json:"total_revenue"`
-	TotalOrders       int64                       `json:"total_orders"`
-	DeliveredOrders   int64                       `json:"delivered_orders"`
-	CancelledOrders   int64                       `json:"cancelled_orders"`
-	AvgOrderValue     float64                     `json:"avg_order_value"`
-	TopProducts       []CardShopTopProductResult   `json:"top_products"`
-	RevenueBreakdown  []CardShopRevenuePointResult `json:"revenue_breakdown"`
+	TotalRevenue     int64                        `json:"total_revenue"`
+	TotalOrders      int64                        `json:"total_orders"`
+	DeliveredOrders  int64                        `json:"delivered_orders"`
+	CancelledOrders  int64                        `json:"cancelled_orders"`
+	AvgOrderValue    float64                      `json:"avg_order_value"`
+	TopProducts      []CardShopTopProductResult   `json:"top_products"`
+	RevenueBreakdown []CardShopRevenuePointResult `json:"revenue_breakdown"`
 }
 
 type CardShopTopProductResult struct {
@@ -32,27 +32,33 @@ type CardShopRevenuePointResult struct {
 func GetCardShopAnalytics(startTime, endTime int64) (*CardShopAnalyticsResult, error) {
 	var result CardShopAnalyticsResult
 
+	// Single pass over the create_time range computes totals plus per-status
+	// counts via CASE, instead of three separate full scans. CASE/SUM is
+	// standard SQL and works on SQLite/MySQL/PostgreSQL. Scan into a flat
+	// struct: scanning into CardShopAnalyticsResult (which has slice fields)
+	// makes GORM try to resolve TopProducts/RevenueBreakdown as relations.
+	var agg struct {
+		TotalRevenue    int64
+		TotalOrders     int64
+		DeliveredOrders int64
+		CancelledOrders int64
+	}
 	err := DB.Model(&CardOrder{}).
 		Where("create_time >= ? AND create_time <= ?", startTime, endTime).
-		Select("COALESCE(SUM(amount), 0) as total_revenue, COUNT(*) as total_orders").
-		Scan(&result).Error
+		Select(
+			"COALESCE(SUM(amount), 0) as total_revenue, "+
+				"COUNT(*) as total_orders, "+
+				"COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0) as delivered_orders, "+
+				"COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0) as cancelled_orders",
+			CardShopOrderDelivered, CardShopOrderCancelled).
+		Scan(&agg).Error
 	if err != nil {
 		return nil, err
 	}
-
-	err = DB.Model(&CardOrder{}).
-		Where("create_time >= ? AND create_time <= ? AND status = ?", startTime, endTime, CardShopOrderDelivered).
-		Count(&result.DeliveredOrders).Error
-	if err != nil {
-		return nil, err
-	}
-
-	err = DB.Model(&CardOrder{}).
-		Where("create_time >= ? AND create_time <= ? AND status = ?", startTime, endTime, CardShopOrderCancelled).
-		Count(&result.CancelledOrders).Error
-	if err != nil {
-		return nil, err
-	}
+	result.TotalRevenue = agg.TotalRevenue
+	result.TotalOrders = agg.TotalOrders
+	result.DeliveredOrders = agg.DeliveredOrders
+	result.CancelledOrders = agg.CancelledOrders
 
 	if result.TotalOrders > 0 {
 		result.AvgOrderValue = float64(result.TotalRevenue) / float64(result.TotalOrders)
