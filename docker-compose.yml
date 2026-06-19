@@ -36,6 +36,11 @@ services:
 #      - STREAMING_TIMEOUT=300  # 流模式无响应超时时间，单位秒，默认120秒，如果出现空补全可以尝试改为更大值 （Streaming timeout in seconds, default is 120s. Increase if experiencing empty completions）
 #      - RELAY_IDLE_CONN_TIMEOUT=90  # Relay HTTP 客户端空闲连接超时时间，单位秒，默认跟随 Go 标准库，设置为0表示不限制 (Relay HTTP client idle keep-alive timeout in seconds, defaults to Go standard library; set 0 to disable)
 #      - SESSION_SECRET=random_string  # 多机部署时设置，必须修改这个随机字符串！！ （multi-node deployment, set this to a random string!!!!!!!）
+      # 卡密加密密钥（发卡网导入卡密必须设置）。值从同目录 .env 文件读取，切勿写死后提交到 git。
+      # 生成：openssl rand -hex 32 ；⚠️ 设置后永不可更改，否则已导入卡密将无法解密。
+      # （Card-shop card encryption key; required to import cards. Read from .env, never hard-code.
+      #  Generate with `openssl rand -hex 32`. NEVER change it once set or existing cards become unreadable.）
+      - CRYPTO_SECRET=${CRYPTO_SECRET:-}
 #      - SYNC_FREQUENCY=60  # Uncomment if regular database syncing is needed
 #      - GOOGLE_ANALYTICS_ID=G-XXXXXXXXXX  # Google Analytics 的测量 ID (Google Analytics Measurement ID)
 #      - UMAMI_WEBSITE_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx  # Umami 网站 ID (Umami Website ID)
