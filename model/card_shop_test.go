@@ -44,9 +44,9 @@ func createCardShopProductWithCards(t *testing.T, cards []string) *Product {
 	t.Helper()
 	product := &Product{Name: "test product", Price: 10, Enabled: true}
 	require.NoError(t, CreateProduct(product))
-	count, err := BatchCreateCards(product.ID, cards)
+	added, _, err := BatchCreateCards(product.ID, cards)
 	require.NoError(t, err)
-	require.Equal(t, len(cards), count)
+	require.Equal(t, len(cards), added)
 	return product
 }
 
@@ -179,12 +179,40 @@ func TestCardShopImportRequiresExplicitCryptoSecret(t *testing.T) {
 	product := &Product{Name: "test product", Price: 10, Enabled: true}
 	require.NoError(t, CreateProduct(product))
 
-	_, err := BatchCreateCards(product.ID, []string{"card-a"})
+	_, _, err := BatchCreateCards(product.ID, []string{"card-a"})
 	require.ErrorIs(t, err, ErrCardShopCryptoSecretRequired)
 
 	var count int64
 	require.NoError(t, DB.Model(&Card{}).Count(&count).Error)
 	require.Equal(t, int64(0), count)
+}
+
+func TestCardShopImportDeduplicatesCards(t *testing.T) {
+	setupCardShopTestDB(t)
+	product := &Product{Name: "test product", Price: 10, Enabled: true}
+	require.NoError(t, CreateProduct(product))
+
+	// 首次导入两张不同卡密。
+	added, skipped, err := BatchCreateCards(product.ID, []string{"card-a", "card-b"})
+	require.NoError(t, err)
+	require.Equal(t, 2, added)
+	require.Equal(t, 0, skipped)
+
+	// 二次导入：card-a 与已存在重复；card-c 为新卡但在批次内重复出现两次。
+	// 期望：仅新增 card-c 一张，跳过 2 张（已存在的 card-a + 批次内重复的 card-c）。
+	added, skipped, err = BatchCreateCards(product.ID, []string{"card-a", "card-c", "card-c"})
+	require.NoError(t, err)
+	require.Equal(t, 1, added)
+	require.Equal(t, 2, skipped)
+
+	// 库存应为 3（a、b、c），而非朴素追加后的 5。
+	var avail int64
+	require.NoError(t, DB.Model(&Card{}).Where("product_id = ? AND status = ?", product.ID, CardShopCardAvailable).Count(&avail).Error)
+	require.Equal(t, int64(3), avail)
+
+	reloaded, err := GetProductByID(product.ID)
+	require.NoError(t, err)
+	require.Equal(t, 3, reloaded.Stock)
 }
 
 func TestCardShopLegacyTableRenameMigratesData(t *testing.T) {

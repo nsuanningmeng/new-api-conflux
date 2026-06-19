@@ -613,6 +613,7 @@
     "Card Shop": "发卡商城",
     "Card deleted successfully": "卡密删除成功",
     "Failed to load card shop analytics": "加载发卡运营数据失败",
+    "Imported {{added}} cards, skipped {{skipped}} duplicates": "成功导入 {{added}} 张，跳过 {{skipped}} 张重复卡密",
     "Are you sure you want to delete this card?": "确定要删除这张卡密吗？",
     "Only unsold cards can be deleted": "仅可删除未售出的卡密",
     "Manage Cards": "管理卡密",

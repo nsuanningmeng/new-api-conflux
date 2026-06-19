@@ -247,47 +247,107 @@ func GetAllProducts() ([]*Product, error) {
 	return products, err
 }
 
-func BatchCreateCards(productID int64, cards []string) (int, error) {
+// BatchCreateCards 批量导入卡密，并对「批次内重复」与「与该商品已存在卡密重复」去重，
+// 避免管理员重复粘贴/重复导入导致同一卡密被多次入库（同一账号/卡密被卖给多个买家）。
+// 去重依据确定性指纹 GenerateHMAC(明文)——卡密密文用随机 nonce 加密、无法直接比对，
+// 故必须以明文指纹判重。判重与插入在同一事务内、并按商品加锁完成，把并发重复导入的
+// 竞态窗口降到最小。返回实际新增数量 added 与因重复跳过的数量 skipped。
+func BatchCreateCards(productID int64, cards []string) (added int, skipped int, err error) {
 	// B1: 写入卡密前强制要求显式配置 CRYPTO_SECRET，堵住「首次空卡表导入」绕过启动检查、
 	// 用启动随机密钥加密导致重启后不可解密的数据丢失缺口。
 	if !common.CryptoSecretExplicitlyConfigured {
-		return 0, ErrCardShopCryptoSecretRequired
+		return 0, 0, ErrCardShopCryptoSecretRequired
 	}
 	if productID <= 0 {
-		return 0, errors.New("商品ID不能为空")
+		return 0, 0, errors.New("商品ID不能为空")
 	}
 	if len(cards) == 0 {
-		return 0, errors.New("卡密不能为空")
+		return 0, 0, errors.New("卡密不能为空")
 	}
 
-	records := make([]Card, 0, len(cards))
+	// 规范化 + 批次内按指纹去重（同一次粘贴里重复的卡密只保留一张）。
+	type pendingCard struct {
+		content     string
+		fingerprint string
+	}
+	batchSeen := make(map[string]struct{}, len(cards))
+	pending := make([]pendingCard, 0, len(cards))
 	for _, rawCard := range cards {
-		cardContent := strings.TrimSpace(rawCard)
-		if cardContent == "" {
+		content := strings.TrimSpace(rawCard)
+		if content == "" {
 			continue
 		}
-		encrypted, err := common.AESEncrypt(cardContent)
-		if err != nil {
-			return 0, err
+		fp := common.GenerateHMAC(content)
+		if _, dup := batchSeen[fp]; dup {
+			skipped++
+			continue
 		}
-		records = append(records, Card{
-			ProductID:   productID,
-			CardContent: encrypted,
-			CardDisplay: MaskCardContent(cardContent),
-			Status:      CardShopCardAvailable,
-			OrderID:     0,
-		})
+		batchSeen[fp] = struct{}{}
+		pending = append(pending, pendingCard{content: content, fingerprint: fp})
 	}
-	if len(records) == 0 {
-		return 0, errors.New("有效卡密不能为空")
+	if len(pending) == 0 {
+		return 0, 0, errors.New("有效卡密不能为空")
 	}
 
-	return len(records), DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.CreateInBatches(records, 500).Error; err != nil {
-			return err
-		}
-		return syncProductStockTx(tx, productID)
+	err = withCardShopProductLock(productID, func() error {
+		return DB.Transaction(func(tx *gorm.DB) error {
+			// 先对 product 行加锁（FOR UPDATE），与 reserve/deliver/delete「先锁 product 再操作 card」
+			// 的顺序一致。withCardShopProductLock 仅在 SQLite 生效；在 MySQL/PostgreSQL 上必须靠这行
+			// 行锁来串行化同一商品的并发导入，否则两个并发导入会各自读到不含对方未提交卡密的快照、
+			// 双双判定「不重复」而插入同一张卡（导致同一账号被卖两次）。
+			lockProduct := &Product{}
+			if err := cardShopForUpdate(tx).Where("id = ?", productID).First(lockProduct).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return ErrCardShopProductNotFound
+				}
+				return err
+			}
+			// 构建该商品已存在卡密的指纹集合：逐张解密后计算同一 HMAC 指纹。
+			existing := make(map[string]struct{})
+			var existCards []Card
+			if err := tx.Where("product_id = ?", productID).Find(&existCards).Error; err != nil {
+				return err
+			}
+			for i := range existCards {
+				plain, derr := common.AESDecrypt(existCards[i].CardContent)
+				if derr != nil {
+					// 历史卡密若因密钥不一致/损坏无法解密，跳过其去重比对（不阻断本次导入）。
+					continue
+				}
+				existing[common.GenerateHMAC(plain)] = struct{}{}
+			}
+
+			records := make([]Card, 0, len(pending))
+			for _, it := range pending {
+				if _, dup := existing[it.fingerprint]; dup {
+					skipped++
+					continue
+				}
+				encrypted, eerr := common.AESEncrypt(it.content)
+				if eerr != nil {
+					return eerr
+				}
+				records = append(records, Card{
+					ProductID:   productID,
+					CardContent: encrypted,
+					CardDisplay: MaskCardContent(it.content),
+					Status:      CardShopCardAvailable,
+					OrderID:     0,
+				})
+			}
+			added = len(records)
+			if len(records) > 0 {
+				if err := tx.CreateInBatches(records, 500).Error; err != nil {
+					return err
+				}
+			}
+			return syncProductStockTx(tx, productID)
+		})
 	})
+	if err != nil {
+		return 0, 0, err
+	}
+	return added, skipped, nil
 }
 
 func claimAvailableCardForOrderTx(tx *gorm.DB, productID int64, orderID int64) (*Card, error) {

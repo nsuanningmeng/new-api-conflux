@@ -65,7 +65,7 @@ export async function adminDeleteProduct(id: number): Promise<ApiResponse<null>>
   return res.data
 }
 
-export async function adminImportCards(productId: number, cards: string[]): Promise<ApiResponse<{ count: number }>> {
+export async function adminImportCards(productId: number, cards: string[]): Promise<ApiResponse<{ count: number; skipped: number }>> {
   const res = await api.post(`/api/user/cardshop/product/${productId}/cards`, { cards })
   return res.data
 }

@@ -158,7 +158,7 @@ func AdminImportCards(c *gin.Context) {
 		return
 	}
 
-	count, err := model.BatchCreateCards(productID, req.Cards)
+	added, skipped, err := model.BatchCreateCards(productID, req.Cards)
 	if err != nil {
 		// B1: 未配置 CRYPTO_SECRET 时向管理员明确报错，而非笼统的「导入失败」。
 		if errors.Is(err, model.ErrCardShopCryptoSecretRequired) {
@@ -168,7 +168,8 @@ func AdminImportCards(c *gin.Context) {
 		common.ApiErrorMsg(c, "导入卡密失败")
 		return
 	}
-	common.ApiSuccess(c, gin.H{"count": count})
+	// count = 实际新增；skipped = 因批次内/已存在重复而跳过的数量。
+	common.ApiSuccess(c, gin.H{"count": added, "skipped": skipped})
 }
 
 // AdminListCards 返回某商品下的卡密列表（分页，掩码展示），用于管理端「管理卡密」。

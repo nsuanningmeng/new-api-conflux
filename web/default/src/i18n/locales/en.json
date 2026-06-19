@@ -613,6 +613,7 @@
     "Card Shop": "Card Shop",
     "Card deleted successfully": "Card deleted successfully",
     "Failed to load card shop analytics": "Failed to load card shop analytics",
+    "Imported {{added}} cards, skipped {{skipped}} duplicates": "Imported {{added}} cards, skipped {{skipped}} duplicates",
     "Are you sure you want to delete this card?": "Are you sure you want to delete this card?",
     "Only unsold cards can be deleted": "Only unsold cards can be deleted",
     "Manage Cards": "Manage Cards",

@@ -86,7 +86,14 @@ export function CardShopAdminSection() {
       const cardList = (values.cards as string).split('\n').map((s: string) => s.trim()).filter(Boolean)
       const res = await importCards.mutateAsync({ productId: importingProduct.id, cards: cardList })
       if (res?.success) {
-        toast.success(t('Cards imported successfully'))
+        const added = res.data?.count ?? 0
+        const skipped = res.data?.skipped ?? 0
+        // 跳过重复时给出明确计数，让管理员知道有多少卡密因重复未入库。
+        toast.success(
+          skipped > 0
+            ? t('Imported {{added}} cards, skipped {{skipped}} duplicates', { added, skipped })
+            : t('Cards imported successfully')
+        )
         setImportingProduct(null)
       }
     } catch {
@@ -302,7 +309,12 @@ function ProductDialog({ product, open, onClose, onSave, loading }: any) {
 
 function ImportDialog({ product, open, onClose, onSave, loading }: any) {
   const { t } = useTranslation()
-  const { register, handleSubmit } = useForm()
+  const { register, handleSubmit, reset } = useForm({ defaultValues: { cards: '' } })
+  // 弹窗实例不会卸载（仅靠 open 显隐），每次打开或切换商品时清空文本框，
+  // 否则上次导入的卡密会残留在输入框，管理员可能误把同一批卡密重复导入两遍。
+  useEffect(() => {
+    if (open) reset({ cards: '' })
+  }, [open, product?.id, reset])
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
