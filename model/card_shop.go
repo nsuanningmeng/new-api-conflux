@@ -214,7 +214,9 @@ func GetProductByID(id int64) (*Product, error) {
 func GetAllEnabledProducts() ([]*Product, error) {
 	maybeReleaseExpiredCardShopOrders()
 	var products []*Product
-	err := DB.Where("enabled = ? AND stock > 0", true).Order("sort_order desc, id desc").Find(&products).Error
+	// 仅按 enabled 过滤：库存为 0 的商品也在前台展示为「售罄」（ProductCard 已禁用购买），
+	// 这样管理员新建商品后即可在前台看到，无需先导入卡密。售罄拦截在下单接口完成。
+	err := DB.Where("enabled = ?", true).Order("sort_order desc, id desc").Find(&products).Error
 	return products, err
 }
 
@@ -332,6 +334,69 @@ func GetCardByID(id int64) (*Card, error) {
 	}
 	card.CardContent = decrypted
 	return &card, nil
+}
+
+// ListCardsByProduct 返回某商品下的卡密列表（分页），用于管理端「管理卡密」。
+// 出于安全考虑，列表绝不返回加密后的 CardContent，仅返回掩码展示 CardDisplay 与状态。
+func ListCardsByProduct(productID int64, pageInfo *common.PageInfo) (cards []*Card, total int64, err error) {
+	if productID <= 0 {
+		return nil, 0, ErrCardShopProductNotFound
+	}
+	tx := DB.Model(&Card{}).Where("product_id = ?", productID)
+	if err = tx.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if err = tx.Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&cards).Error; err != nil {
+		return nil, 0, err
+	}
+	for _, c := range cards {
+		c.CardContent = "" // 永不向前端泄露加密内容
+	}
+	return cards, total, nil
+}
+
+// DeleteCard 删除一张卡密。仅允许删除 available 状态的卡（未被订单锁定、未售出），
+// 避免破坏 pending 订单的 reserved 卡或已交付的 sold 卡。删除后重算商品库存。
+func DeleteCard(cardID int64) error {
+	if cardID <= 0 {
+		return ErrCardShopCardNotFound
+	}
+	var card Card
+	if err := DB.Where("id = ?", cardID).First(&card).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrCardShopCardNotFound
+		}
+		return err
+	}
+	if card.Status != CardShopCardAvailable {
+		return errors.New("仅可删除未售出且未锁定的卡密")
+	}
+	return withCardShopProductLock(card.ProductID, func() error {
+		return DB.Transaction(func(tx *gorm.DB) error {
+			// 先锁 product 行，再操作 card，与 reserve/deliver/release 的加锁顺序保持一致
+			// （它们都是「先锁 product 再锁 card」）。在 MySQL/PostgreSQL 上 withCardShopProductLock
+			// 为 no-op，若此处「先删卡(锁 card) → syncProductStockTx 更新库存(锁 product)」，会与下单
+			// 事务「锁 product → 锁 card」形成 AB-BA 死锁；先锁 product 既消除死锁，也让库存重算在
+			// product 锁下串行化，避免与并发下单的库存写丢失更新。
+			lockProduct := &Product{}
+			if err := cardShopForUpdate(tx).Where("id = ?", card.ProductID).First(lockProduct).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return ErrCardShopProductNotFound
+				}
+				return err
+			}
+			// 事务内再次以 status 作为条件，防止与下单 reserve 产生竞态：
+			// 若卡已在此期间被锁定/售出，RowsAffected==0 则中止删除。
+			result := tx.Where("id = ? AND status = ?", cardID, CardShopCardAvailable).Delete(&Card{})
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected == 0 {
+				return errors.New("卡密不存在或已被锁定/售出")
+			}
+			return syncProductStockTx(tx, card.ProductID)
+		})
+	})
 }
 
 func MaskCardContent(content string) string {

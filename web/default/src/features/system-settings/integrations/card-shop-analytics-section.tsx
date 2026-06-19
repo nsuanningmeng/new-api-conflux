@@ -41,13 +41,20 @@ export function CardShopAnalyticsSection() {
   const { t } = useTranslation()
   const [period, setPeriod] = useState<Period>('daily')
 
-  const { data, isLoading } = useQuery<AnalyticsData>({
+  const { data, isLoading, isError } = useQuery<AnalyticsData>({
     queryKey: ['card-shop-analytics', period],
     queryFn: async () => {
-      const res = await api.get(`/api/user/cardshop/admin/analytics?period=${period}`)
-      if (res.data?.message !== 'success') throw new Error(res.data?.data || 'Failed to fetch analytics')
+      // skipBusinessError: business failures are surfaced inline by this component.
+      // Without it, the global interceptor would toast the error, and combined with
+      // retries + the 60s poll that produces duplicate toasts on a persistent failure.
+      const res = await api.get(`/api/user/cardshop/admin/analytics?period=${period}`, {
+        skipBusinessError: true,
+      })
+      if (!res.data?.success) throw new Error(res.data?.message || 'Failed to fetch analytics')
       return res.data.data as AnalyticsData
     },
+    // Don't retry business failures (a thrown plain Error would otherwise retry ~4x).
+    retry: false,
     // Each fetch runs several aggregate scans server-side; analytics need not be
     // real-time. Poll once a minute, only while the tab is visible, and treat
     // data as fresh in between so re-mounts don't refetch needlessly.
@@ -90,6 +97,14 @@ export function CardShopAnalyticsSection() {
           ))}
         </div>
         <div className="h-64 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" />
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+        {t('Failed to load card shop analytics')}
       </div>
     )
   }

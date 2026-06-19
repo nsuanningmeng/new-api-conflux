@@ -9,6 +9,15 @@ export interface CardShopProduct {
   stock: number
 }
 
+export interface CardShopCard {
+  id: number
+  product_id: number
+  card_display: string
+  status: 'available' | 'sold' | 'reserved'
+  order_id: number
+  created_at: number
+}
+
 export interface CardShopOrder {
   id: number
   product_id: number
@@ -26,6 +35,7 @@ export interface CardShopOrder {
 // API Response types
 export type ProductsResponse = ApiResponse<CardShopProduct[]>
 export type ProductResponse = ApiResponse<CardShopProduct>
+export type CardsResponse = ApiResponse<{ items: CardShopCard[]; total: number }>
 export type OrdersResponse = ApiResponse<{ items: CardShopOrder[]; total: number }>
 export type OrderDetailResponse = ApiResponse<CardShopOrder>
 export type CreateOrderResponse = ApiResponse<{

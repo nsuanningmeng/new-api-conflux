@@ -9,6 +9,8 @@ import {
   adminUpdateProduct,
   adminDeleteProduct,
   adminImportCards,
+  adminGetProductCards,
+  adminDeleteCard,
   adminGetAllOrders,
 } from '../api'
 
@@ -103,11 +105,52 @@ export function useAdminDeleteProduct() {
 
 /**
  * Admin: Hook for importing cards
+ *
+ * Invalidates the product lists so the derived stock column refreshes
+ * immediately after a successful import (otherwise the table keeps showing
+ * the stale pre-import stock, e.g. 0).
  */
 export function useAdminImportCards() {
+  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ productId, cards }: { productId: number; cards: string[] }) =>
       adminImportCards(productId, cards),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-card-shop-products'] })
+      queryClient.invalidateQueries({ queryKey: ['card-shop-products'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-card-shop-cards'] })
+    },
+  })
+}
+
+/**
+ * Admin: Hook for listing a product's imported cards (paginated, masked)
+ */
+export function useAdminProductCards(
+  productId: number,
+  page: number,
+  pageSize: number,
+  enabled: boolean
+) {
+  return useQuery({
+    queryKey: ['admin-card-shop-cards', productId, page, pageSize],
+    queryFn: () => adminGetProductCards(productId, page, pageSize),
+    enabled: enabled && !!productId,
+  })
+}
+
+/**
+ * Admin: Hook for deleting a single card (re-syncs derived stock server-side)
+ */
+export function useAdminDeleteCard() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (cardId: number) => adminDeleteCard(cardId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-card-shop-cards'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-card-shop-products'] })
+      queryClient.invalidateQueries({ queryKey: ['card-shop-products'] })
+    },
   })
 }
 

@@ -1,7 +1,9 @@
 import { api } from '@/lib/api'
+import type { ApiResponse } from '../wallet/types'
 import type {
   ProductsResponse,
   ProductResponse,
+  CardsResponse,
   CreateOrderResponse,
   OrdersResponse,
   OrderDetailResponse,
@@ -58,13 +60,31 @@ export async function adminUpdateProduct(id: number, product: Record<string, unk
   return res.data
 }
 
-export async function adminDeleteProduct(id: number): Promise<{ message: string }> {
+export async function adminDeleteProduct(id: number): Promise<ApiResponse<null>> {
   const res = await api.delete(`/api/user/cardshop/product/${id}`)
   return res.data
 }
 
-export async function adminImportCards(productId: number, cards: string[]): Promise<{ message: string; data: { count: number } }> {
+export async function adminImportCards(productId: number, cards: string[]): Promise<ApiResponse<{ count: number }>> {
   const res = await api.post(`/api/user/cardshop/product/${productId}/cards`, { cards })
+  return res.data
+}
+
+export async function adminGetProductCards(
+  productId: number,
+  page: number,
+  pageSize: number
+): Promise<CardsResponse> {
+  const params = new URLSearchParams({
+    p: page.toString(),
+    page_size: pageSize.toString(),
+  })
+  const res = await api.get(`/api/user/cardshop/product/${productId}/cards?${params.toString()}`)
+  return res.data
+}
+
+export async function adminDeleteCard(cardId: number): Promise<ApiResponse<null>> {
+  const res = await api.delete(`/api/user/cardshop/card/${cardId}`)
   return res.data
 }
 

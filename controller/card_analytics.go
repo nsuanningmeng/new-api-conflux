@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"net/http"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -41,7 +40,7 @@ type cardShopRevenuePoint struct {
 func AdminGetCardShopAnalytics(c *gin.Context) {
 	var req cardShopAnalyticsRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
+		common.ApiErrorMsg(c, "参数错误")
 		return
 	}
 
@@ -82,18 +81,18 @@ func AdminGetCardShopAnalytics(c *gin.Context) {
 
 	stats, err := model.GetCardShopAnalytics(startTime, endTime)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取统计数据失败"})
+		common.ApiErrorMsg(c, "获取统计数据失败")
 		return
 	}
 
 	breakdown, err := model.GetCardShopRevenueBreakdown(startTime, endTime, req.Period)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取收入明细失败"})
+		common.ApiErrorMsg(c, "获取收入明细失败")
 		return
 	}
 	stats.RevenueBreakdown = breakdown
 
-	c.JSON(http.StatusOK, gin.H{"message": "success", "data": stats})
+	common.ApiSuccess(c, stats)
 }
 
 func beginningOfDay(ts int64) int64 {
@@ -136,8 +135,8 @@ func AdminGetCardShopDailyTrend(c *gin.Context) {
 
 	breakdown, err := model.GetCardShopRevenueBreakdown(startTime, now, period)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取趋势失败"})
+		common.ApiErrorMsg(c, "获取趋势失败")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "success", "data": breakdown})
+	common.ApiSuccess(c, breakdown)
 }

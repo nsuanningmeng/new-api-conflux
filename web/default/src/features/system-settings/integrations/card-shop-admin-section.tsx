@@ -1,12 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { PlusIcon, TrashIcon, DownloadIcon, HistoryIcon, PackageIcon } from 'lucide-react'
+import { PlusIcon, TrashIcon, DownloadIcon, HistoryIcon, PackageIcon, ListIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -17,23 +18,33 @@ import {
   useAdminUpdateProduct,
   useAdminDeleteProduct,
   useAdminImportCards,
+  useAdminProductCards,
+  useAdminDeleteCard,
   useAdminAllOrders
 } from '../../card-shop/hooks/use-card-shop'
 import { OrderList } from '../../card-shop/components/order-list'
 import { DEFAULT_PAGE_SIZE } from '../../card-shop/constants'
 import type { CardShopProduct } from '../../card-shop/types'
 
+// 卡密状态 -> 展示标签 + Badge 样式。标签经 t() 翻译。
+const CARD_STATUS_META: Record<string, { label: string; variant: 'secondary' | 'outline' | 'default' }> = {
+  available: { label: 'Available', variant: 'secondary' },
+  reserved: { label: 'Reserved', variant: 'outline' },
+  sold: { label: 'Sold', variant: 'default' },
+}
+
 export function CardShopAdminSection() {
   const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState('products')
   const [editingProduct, setEditingProduct] = useState<Partial<CardShopProduct> | null>(null)
   const [importingProduct, setImportingProduct] = useState<CardShopProduct | null>(null)
+  const [managingProduct, setManagingProduct] = useState<CardShopProduct | null>(null)
   const [orderPage, setOrderPage] = useState(1)
   const [orderStatus, setOrderStatus] = useState<string | undefined>(undefined)
 
   const { data: productsData, isLoading: loadingProducts } = useAdminCardShopProducts()
   const { data: ordersData, isLoading: loadingOrders } = useAdminAllOrders(orderPage, DEFAULT_PAGE_SIZE, orderStatus)
-  
+
   const createProduct = useAdminCreateProduct()
   const updateProduct = useAdminUpdateProduct()
   const deleteProduct = useAdminDeleteProduct()
@@ -43,28 +54,29 @@ export function CardShopAdminSection() {
   const orders = ordersData?.data?.items || []
   const ordersTotal = ordersData?.data?.total || 0
 
+  // 业务失败（success:false）的错误提示由 axios 拦截器统一弹出；这里只在确认成功后弹成功提示，
+  // 避免「后端拒绝但前端误报成功」（旧 bug：商品/卡密未真正创建却提示成功）。
   const handleSaveProduct = async (values: any) => {
     try {
-      if (values.id) {
-        await updateProduct.mutateAsync({ id: values.id, product: values })
-        toast.success(t('Product updated successfully'))
-      } else {
-        await createProduct.mutateAsync(values)
-        toast.success(t('Product created successfully'))
+      const res = values.id
+        ? await updateProduct.mutateAsync({ id: values.id, product: values })
+        : await createProduct.mutateAsync(values)
+      if (res?.success) {
+        toast.success(values.id ? t('Product updated successfully') : t('Product created successfully'))
+        setEditingProduct(null)
       }
-      setEditingProduct(null)
-    } catch (err: any) {
-      toast.error(err.message || t('Operation failed'))
+    } catch {
+      /* 网络/HTTP 错误已由拦截器处理 */
     }
   }
 
   const handleDeleteProduct = async (id: number) => {
     if (!confirm(t('Are you sure you want to delete this product?'))) return
     try {
-      await deleteProduct.mutateAsync(id)
-      toast.success(t('Product deleted successfully'))
-    } catch (err: any) {
-      toast.error(err.message || t('Delete failed'))
+      const res = await deleteProduct.mutateAsync(id)
+      if (res?.success) toast.success(t('Product deleted successfully'))
+    } catch {
+      /* 由拦截器处理 */
     }
   }
 
@@ -72,11 +84,13 @@ export function CardShopAdminSection() {
     if (!importingProduct) return
     try {
       const cardList = (values.cards as string).split('\n').map((s: string) => s.trim()).filter(Boolean)
-      await importCards.mutateAsync({ productId: importingProduct.id, cards: cardList })
-      toast.success(t('Cards imported successfully'))
-      setImportingProduct(null)
-    } catch (err: any) {
-      toast.error(err.message || t('Import failed'))
+      const res = await importCards.mutateAsync({ productId: importingProduct.id, cards: cardList })
+      if (res?.success) {
+        toast.success(t('Cards imported successfully'))
+        setImportingProduct(null)
+      }
+    } catch {
+      /* 由拦截器处理 */
     }
   }
 
@@ -127,10 +141,14 @@ export function CardShopAdminSection() {
                     <TableCell>{p.name}</TableCell>
                     <TableCell>{p.price}</TableCell>
                     <TableCell>{p.stock}</TableCell>
-                    <TableCell className="text-right space-x-2">
+                    <TableCell className="text-right space-x-1">
                       <Button variant="ghost" size="sm" onClick={() => setImportingProduct(p)}>
                         <DownloadIcon className="size-4 mr-1" />
                         {t('Import')}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setManagingProduct(p)}>
+                        <ListIcon className="size-4 mr-1" />
+                        {t('Manage Cards')}
                       </Button>
                       <Button variant="ghost" size="sm" onClick={() => setEditingProduct(p)}>
                         {t('Edit')}
@@ -150,9 +168,9 @@ export function CardShopAdminSection() {
           <div className="flex justify-between items-center mb-4">
             <div className="flex gap-2">
               {['pending', 'paid', 'delivered', 'cancelled'].map(s => (
-                <Button 
-                  key={s} 
-                  variant={orderStatus === s ? 'default' : 'outline'} 
+                <Button
+                  key={s}
+                  variant={orderStatus === s ? 'default' : 'outline'}
                   size="xs"
                   onClick={() => setOrderStatus(orderStatus === s ? undefined : s)}
                 >
@@ -164,9 +182,13 @@ export function CardShopAdminSection() {
               {t('Total')}: {ordersTotal}
             </div>
           </div>
-          
-          <OrderList orders={orders} isAdmin />
-          
+
+          {loadingOrders ? (
+            <div className="py-8 text-center text-muted-foreground">{t('Loading...')}</div>
+          ) : (
+            <OrderList orders={orders} isAdmin />
+          )}
+
           <div className="flex justify-center gap-2 mt-4">
             <Button
               variant="outline"
@@ -205,14 +227,26 @@ export function CardShopAdminSection() {
         onSave={handleImportCards}
         loading={importCards.isPending}
       />
+
+      {/* Manage Cards Dialog */}
+      <ManageCardsDialog
+        product={managingProduct}
+        open={!!managingProduct}
+        onClose={() => setManagingProduct(null)}
+      />
     </SettingsSection>
   )
 }
 
 function ProductDialog({ product, open, onClose, onSave, loading }: any) {
   const { t } = useTranslation()
-  const { register, handleSubmit, reset } = useForm({
-    values: product || { name: '', description: '', price: 0, image_url: '', stock: 0 }
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm({
+    // 合并默认值：新建时 product 为 {}，需提供空白默认值，否则必填校验无法对未填字段生效。
+    values: { name: '', description: '', price: 0, image_url: '', ...(product ?? {}) },
   })
 
   return (
@@ -223,8 +257,11 @@ function ProductDialog({ product, open, onClose, onSave, loading }: any) {
         </DialogHeader>
         <form onSubmit={handleSubmit(onSave)} className="space-y-4">
           <div className="grid gap-2">
-            <Label>{t('Product Name')}</Label>
-            <Input {...register('name', { required: true })} />
+            <Label>
+              {t('Product Name')} <span className="text-destructive">*</span>
+            </Label>
+            <Input {...register('name', { required: t('Product name is required') as string })} />
+            {errors.name && <p className="text-xs text-destructive">{errors.name.message as string}</p>}
           </div>
           <div className="grid gap-2">
             <Label>{t('Description')}</Label>
@@ -232,14 +269,27 @@ function ProductDialog({ product, open, onClose, onSave, loading }: any) {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <Label>{t('Price')}</Label>
-              <Input type="number" step="0.01" {...register('price', { valueAsNumber: true })} />
+              <Label>
+                {t('Price')} <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                type="number"
+                step="1"
+                min="1"
+                {...register('price', {
+                  required: t('Price is required') as string,
+                  valueAsNumber: true,
+                  min: { value: 1, message: t('Price must be greater than 0') as string },
+                })}
+              />
+              {errors.price && <p className="text-xs text-destructive">{errors.price.message as string}</p>}
             </div>
             <div className="grid gap-2">
               <Label>{t('Image URL')}</Label>
               <Input {...register('image_url')} />
             </div>
           </div>
+          <p className="text-xs text-muted-foreground">{t('Stock is derived from imported cards and cannot be edited here')}</p>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>{t('Cancel')}</Button>
             <Button type="submit" disabled={loading}>{loading ? t('Saving...') : t('Save')}</Button>
@@ -264,10 +314,10 @@ function ImportDialog({ product, open, onClose, onSave, loading }: any) {
         <form onSubmit={handleSubmit(onSave)} className="space-y-4">
           <div className="grid gap-2">
             <Label>{t('Card Secrets')}</Label>
-            <Textarea 
-              placeholder={t('One card per line')} 
-              className="min-h-64 font-mono text-xs" 
-              {...register('cards', { required: true })} 
+            <Textarea
+              placeholder={t('One card per line')}
+              className="min-h-64 font-mono text-xs"
+              {...register('cards', { required: true })}
             />
           </div>
           <DialogFooter>
@@ -275,6 +325,103 @@ function ImportDialog({ product, open, onClose, onSave, loading }: any) {
             <Button type="submit" disabled={loading}>{loading ? t('Importing...') : t('Import')}</Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function ManageCardsDialog({
+  product,
+  open,
+  onClose,
+}: {
+  product: CardShopProduct | null
+  open: boolean
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  const [page, setPage] = useState(1)
+  // 此弹窗实例不会卸载（仅靠 open 控制显隐），故每次打开或切换商品时手动重置到第 1 页，
+  // 否则上次翻页后的 page 会残留，导致新商品在该页无数据时误显示「暂无卡密」。
+  useEffect(() => {
+    if (open) setPage(1)
+  }, [open, product?.id])
+  const { data, isLoading } = useAdminProductCards(product?.id ?? 0, page, DEFAULT_PAGE_SIZE, open && !!product)
+  const deleteCard = useAdminDeleteCard()
+
+  const cards = data?.data?.items || []
+  const total = data?.data?.total || 0
+
+  const handleDeleteCard = async (cardId: number) => {
+    if (!confirm(t('Are you sure you want to delete this card?'))) return
+    try {
+      const res = await deleteCard.mutateAsync(cardId)
+      if (res?.success) toast.success(t('Card deleted successfully'))
+    } catch {
+      /* 由拦截器处理 */
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{t('Manage Cards')}</DialogTitle>
+          <DialogDescription>{product?.name}</DialogDescription>
+        </DialogHeader>
+
+        <div className="rounded-md border max-h-[55vh] overflow-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>ID</TableHead>
+                <TableHead>{t('Card Secret')}</TableHead>
+                <TableHead>{t('Status')}</TableHead>
+                <TableHead className="text-right">{t('Actions')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow><TableCell colSpan={4} className="text-center py-8">{t('Loading...')}</TableCell></TableRow>
+              ) : cards.length === 0 ? (
+                <TableRow><TableCell colSpan={4} className="text-center py-8">{t('No cards')}</TableCell></TableRow>
+              ) : cards.map((card) => {
+                const meta = CARD_STATUS_META[card.status] ?? CARD_STATUS_META.available
+                return (
+                  <TableRow key={card.id}>
+                    <TableCell>{card.id}</TableCell>
+                    <TableCell className="font-mono text-xs">{card.card_display || '—'}</TableCell>
+                    <TableCell><Badge variant={meta.variant}>{t(meta.label)}</Badge></TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive"
+                        disabled={card.status !== 'available' || deleteCard.isPending}
+                        title={card.status !== 'available' ? t('Only unsold cards can be deleted') : undefined}
+                        onClick={() => handleDeleteCard(card.id)}
+                      >
+                        <TrashIcon className="size-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">{t('Total')}: {total}</span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>
+              {t('Previous')}
+            </Button>
+            <Button variant="outline" size="sm" disabled={cards.length < DEFAULT_PAGE_SIZE} onClick={() => setPage(p => p + 1)}>
+              {t('Next')}
+            </Button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   )

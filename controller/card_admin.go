@@ -3,7 +3,6 @@ package controller
 import (
 	"errors"
 	"fmt"
-	"net/http"
 	"strconv"
 	"strings"
 
@@ -15,14 +14,14 @@ import (
 
 // adminProductRequest 的可选标量字段统一使用指针类型（遵循 Rule 6）：
 // nil 表示客户端未提交该字段、应保留既有值；非 nil 才覆盖。
-// 这样 partial PUT（仅提交部分字段）不会把未提交字段静默清空。
+// 注意：库存 stock 完全由卡密数量派生（syncProductStockTx），不接受管理端直接写入，
+// 故此处不包含 Stock 字段——避免「手填库存」与「按卡密自动重算」相互覆盖。
 type adminProductRequest struct {
 	Name        *string `json:"name"`
 	Description *string `json:"description"`
 	Price       *int64  `json:"price"`
 	ImageURL    *string `json:"image_url"`
 	Enabled     *bool   `json:"enabled"`
-	Stock       *int    `json:"stock"`
 	SortOrder   *int    `json:"sort_order"`
 }
 
@@ -48,9 +47,6 @@ func (req adminProductRequest) applyTo(product *model.Product) {
 	if req.ImageURL != nil {
 		product.ImageURL = strings.TrimSpace(*req.ImageURL)
 	}
-	if req.Stock != nil {
-		product.Stock = *req.Stock
-	}
 	if req.SortOrder != nil {
 		product.SortOrder = *req.SortOrder
 	}
@@ -61,15 +57,11 @@ func (req adminProductRequest) applyTo(product *model.Product) {
 
 func validateAdminProduct(c *gin.Context, product *model.Product) bool {
 	if strings.TrimSpace(product.Name) == "" {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "商品名称不能为空"})
+		common.ApiErrorMsg(c, "商品名称不能为空")
 		return false
 	}
 	if product.Price <= 0 {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "商品价格必须大于0"})
-		return false
-	}
-	if product.Stock < 0 {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "库存不能为负数"})
+		common.ApiErrorMsg(c, "商品价格必须大于0")
 		return false
 	}
 	return true
@@ -78,16 +70,16 @@ func validateAdminProduct(c *gin.Context, product *model.Product) bool {
 func AdminGetAllProducts(c *gin.Context) {
 	products, err := model.GetAllProducts()
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取商品列表失败"})
+		common.ApiErrorMsg(c, "获取商品列表失败")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "success", "data": products})
+	common.ApiSuccess(c, products)
 }
 
 func AdminCreateProduct(c *gin.Context) {
 	var req adminProductRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
+		common.ApiErrorMsg(c, "参数错误")
 		return
 	}
 
@@ -98,28 +90,28 @@ func AdminCreateProduct(c *gin.Context) {
 	}
 
 	if err := model.CreateProduct(product); err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "创建商品失败"})
+		common.ApiErrorMsg(c, "创建商品失败")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "success", "data": product})
+	common.ApiSuccess(c, product)
 }
 
 func AdminUpdateProduct(c *gin.Context) {
 	productID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || productID <= 0 {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "无效的商品ID"})
+		common.ApiErrorMsg(c, "无效的商品ID")
 		return
 	}
 
 	var req adminProductRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
+		common.ApiErrorMsg(c, "参数错误")
 		return
 	}
 
 	product, err := model.GetProductByID(productID)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "商品不存在"})
+		common.ApiErrorMsg(c, "商品不存在")
 		return
 	}
 	req.applyTo(product)
@@ -128,41 +120,41 @@ func AdminUpdateProduct(c *gin.Context) {
 	}
 
 	if err := model.UpdateProduct(product); err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "修改商品失败"})
+		common.ApiErrorMsg(c, "修改商品失败")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "success", "data": product})
+	common.ApiSuccess(c, product)
 }
 
 func AdminDeleteProduct(c *gin.Context) {
 	productID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || productID <= 0 {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "无效的商品ID"})
+		common.ApiErrorMsg(c, "无效的商品ID")
 		return
 	}
 
 	if err := model.DeleteProduct(productID); err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "删除商品失败"})
+		common.ApiErrorMsg(c, "删除商品失败")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "success", "data": nil})
+	common.ApiSuccess(c, nil)
 }
 
 func AdminImportCards(c *gin.Context) {
 	productID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || productID <= 0 {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "无效的商品ID"})
+		common.ApiErrorMsg(c, "无效的商品ID")
 		return
 	}
 
 	var req adminImportCardsRequest
 	if err := c.ShouldBindJSON(&req); err != nil || len(req.Cards) == 0 {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "卡密不能为空"})
+		common.ApiErrorMsg(c, "卡密不能为空")
 		return
 	}
 
 	if _, err := model.GetProductByID(productID); err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "商品不存在"})
+		common.ApiErrorMsg(c, "商品不存在")
 		return
 	}
 
@@ -170,13 +162,49 @@ func AdminImportCards(c *gin.Context) {
 	if err != nil {
 		// B1: 未配置 CRYPTO_SECRET 时向管理员明确报错，而非笼统的「导入失败」。
 		if errors.Is(err, model.ErrCardShopCryptoSecretRequired) {
-			c.JSON(http.StatusOK, gin.H{"message": "error", "data": err.Error()})
+			common.ApiErrorMsg(c, err.Error())
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "导入卡密失败"})
+		common.ApiErrorMsg(c, "导入卡密失败")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "success", "data": gin.H{"count": count}})
+	common.ApiSuccess(c, gin.H{"count": count})
+}
+
+// AdminListCards 返回某商品下的卡密列表（分页，掩码展示），用于管理端「管理卡密」。
+func AdminListCards(c *gin.Context) {
+	productID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || productID <= 0 {
+		common.ApiErrorMsg(c, "无效的商品ID")
+		return
+	}
+	if _, err := model.GetProductByID(productID); err != nil {
+		common.ApiErrorMsg(c, "商品不存在")
+		return
+	}
+	pageInfo := common.GetPageQuery(c)
+	cards, total, err := model.ListCardsByProduct(productID, pageInfo)
+	if err != nil {
+		common.ApiErrorMsg(c, "获取卡密列表失败")
+		return
+	}
+	pageInfo.SetTotal(int(total))
+	pageInfo.SetItems(cards)
+	common.ApiSuccess(c, pageInfo)
+}
+
+// AdminDeleteCard 删除一张未售出且未锁定的卡密，删除后库存自动重算。
+func AdminDeleteCard(c *gin.Context) {
+	cardID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || cardID <= 0 {
+		common.ApiErrorMsg(c, "无效的卡密ID")
+		return
+	}
+	if err := model.DeleteCard(cardID); err != nil {
+		common.ApiErrorMsg(c, err.Error())
+		return
+	}
+	common.ApiSuccess(c, nil)
 }
 
 func AdminGetAllCardOrders(c *gin.Context) {
@@ -184,36 +212,36 @@ func AdminGetAllCardOrders(c *gin.Context) {
 	status := strings.TrimSpace(c.Query("status"))
 	orders, total, err := model.GetAllCardOrders(pageInfo, status)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取订单列表失败"})
+		common.ApiErrorMsg(c, "获取订单列表失败")
 		return
 	}
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(orders)
-	c.JSON(http.StatusOK, gin.H{"message": "success", "data": pageInfo})
+	common.ApiSuccess(c, pageInfo)
 }
 
 func AdminManualDeliver(c *gin.Context) {
 	orderID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || orderID <= 0 {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "无效的订单ID"})
+		common.ApiErrorMsg(c, "无效的订单ID")
 		return
 	}
 
 	order, err := model.GetCardOrderByID(orderID)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "订单不存在"})
+		common.ApiErrorMsg(c, "订单不存在")
 		return
 	}
 
 	var req adminManualDeliverRequest
 	if c.Request.ContentLength > 0 {
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
+			common.ApiErrorMsg(c, "参数错误")
 			return
 		}
 	}
 	if order.Status == model.CardShopOrderPending && !req.Force {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "订单未支付，不能手动发卡"})
+		common.ApiErrorMsg(c, "订单未支付，不能手动发卡")
 		return
 	}
 
@@ -221,11 +249,11 @@ func AdminManualDeliver(c *gin.Context) {
 	defer UnlockOrder(order.TradeNo)
 
 	if err := model.ManualDeliverCardOrder(orderID, req.Force); err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": err.Error()})
+		common.ApiErrorMsg(c, err.Error())
 		return
 	}
 
 	logger.LogInfo(c.Request.Context(), fmt.Sprintf("管理员手动补发卡密 order_id=%d user_id=%d force=%t reason=%q", orderID, order.UserID, req.Force, strings.TrimSpace(req.Reason)))
 	model.RecordLog(order.UserID, model.LogTypeSystem, fmt.Sprintf("管理员手动发卡 order_id=%d force=%t reason=%s", orderID, req.Force, strings.TrimSpace(req.Reason)))
-	c.JSON(http.StatusOK, gin.H{"message": "success", "data": nil})
+	common.ApiSuccess(c, nil)
 }
