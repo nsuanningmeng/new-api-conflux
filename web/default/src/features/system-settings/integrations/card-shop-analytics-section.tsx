@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
+import { formatLocalCurrencyAmount } from '@/lib/currency'
 import { VChart } from '@visactor/react-vchart'
 
 type Period = 'daily' | 'weekly' | 'monthly'
@@ -70,7 +71,8 @@ export function CardShopAnalyticsSection() {
       data: {
         values: data.revenue_breakdown.map((d) => ({
           date: d.date,
-          revenue: d.revenue / 100,
+          // amount 存主货币单位（与 storefront 一致，无 /100）；此前 /100 使营收显示偏小 100 倍。
+          revenue: d.revenue,
           orders: d.orders,
         })),
       },
@@ -91,7 +93,7 @@ export function CardShopAnalyticsSection() {
     return (
       <div className="space-y-4">
         <div className="h-8 w-48 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="h-24 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" />
           ))}
@@ -142,11 +144,11 @@ export function CardShopAnalyticsSection() {
         />
         <StatCard
           label={t('Card Shop Revenue')}
-          value={data ? (data.total_revenue / 100).toFixed(2) : '0.00'}
+          value={formatLocalCurrencyAmount(data?.total_revenue ?? 0)}
         />
         <StatCard
           label={t('Avg Order')}
-          value={data ? (data.avg_order_value / 100).toFixed(2) : '0.00'}
+          value={formatLocalCurrencyAmount(data?.avg_order_value ?? 0)}
         />
       </div>
 
@@ -170,7 +172,7 @@ export function CardShopAnalyticsSection() {
             {data.top_products.map((p, i) => (
               <div
                 key={p.product_id}
-                className="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-2 dark:bg-gray-750"
+                className="flex items-center justify-between rounded-lg bg-muted/50 px-4 py-2"
               >
                 <div className="flex items-center gap-3">
                   <span className="text-sm font-medium text-gray-400">{i + 1}</span>
@@ -178,7 +180,7 @@ export function CardShopAnalyticsSection() {
                 </div>
                 <div className="flex items-center gap-4 text-sm text-gray-500">
                   <span>{p.order_count} {t('orders')}</span>
-                  <span className="font-medium text-gray-900 dark:text-white">{(p.revenue / 100).toFixed(2)}</span>
+                  <span className="font-medium text-gray-900 dark:text-white">{formatLocalCurrencyAmount(p.revenue)}</span>
                 </div>
               </div>
             ))}

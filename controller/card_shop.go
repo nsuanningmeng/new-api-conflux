@@ -118,10 +118,14 @@ func CreateCardShopOrder(c *gin.Context) {
 
 	returnURL := firstNonEmpty(strings.TrimSpace(setting.ConfluxAPIReturnURL), paymentReturnPath("/payment/success"))
 	cancelURL := firstNonEmpty(strings.TrimSpace(setting.ConfluxAPICancelURL), paymentReturnPath("/console/topup"))
+	// 让网关支付链接有效期与本地订单 TTL 对齐：超过 TTL 后网关拒绝支付，
+	// 避免「迟付命中已取消订单」导致用户已扣款却拿不到卡（详见 model.CompleteCardOrderPaymentAndDeliver 兜底）。
+	cardShopExpiresIn := model.CardShopOrderTTLSeconds
 	paymentReq := confluxAPICreatePaymentRequest{
 		MchNo:       strings.TrimSpace(setting.ConfluxAPIMchNo),
 		GatewayNo:   strings.TrimSpace(setting.ConfluxAPIGatewayNo),
 		MchOrderNo:  tradeNo,
+		ExpiresIn:   &cardShopExpiresIn,
 		Amount:      formattedAmount,
 		Currency:    currency,
 		ReturnURL:   returnURL,

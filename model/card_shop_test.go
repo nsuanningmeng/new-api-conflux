@@ -291,3 +291,78 @@ func TestCardShopDeleteProductHidesFromListsButKeepsDeliveredCard(t *testing.T) 
 	// 重复删除：软删除行不再匹配默认作用域 -> 视为未找到
 	require.ErrorIs(t, DeleteProduct(product.ID), ErrCardShopProductNotFound)
 }
+
+// expireAndReleaseCardShopOrder 把订单过期时间改到过去并触发释放，模拟本地 TTL 到期：
+// 订单被取消、其预留卡释放回 available。
+func expireAndReleaseCardShopOrder(t *testing.T, order *CardOrder) {
+	t.Helper()
+	require.NoError(t, DB.Model(&CardOrder{}).Where("id = ?", order.ID).Update("expires_at", common.GetTimestamp()-1).Error)
+	require.NoError(t, ReleaseExpiredCardShopOrders())
+	reloaded, err := GetCardOrderByID(order.ID)
+	require.NoError(t, err)
+	require.Equal(t, CardShopOrderCancelled, reloaded.Status)
+}
+
+// TestCardShopLatePaymentOnCancelledOrderRecoversWhenStockAvailable 回归测试 #3：
+// 订单本地 TTL 到期被取消后，若真实支付成功回调才到达，且仍有可用卡，应自动重领卡发货，
+// 而非返回 ErrCardShopOrderStatus（那会让网关 500 无限重试且用户已扣款拿不到卡）。
+func TestCardShopLatePaymentOnCancelledOrderRecoversWhenStockAvailable(t *testing.T) {
+	setupCardShopTestDB(t)
+	product := createCardShopProductWithCards(t, []string{"card-a", "card-b"})
+	order := createReservedCardShopOrder(t, 1, product, "CARDSHOP-1")
+
+	expireAndReleaseCardShopOrder(t, order)
+
+	require.NoError(t, CompleteCardOrderPaymentAndDeliver(order.TradeNo, order.ExpectedAmount, order.Currency, order.FlowOrderNo))
+
+	delivered, err := GetCardOrderByID(order.ID)
+	require.NoError(t, err)
+	require.Equal(t, CardShopOrderDelivered, delivered.Status)
+	require.Greater(t, delivered.CardID, int64(0))
+	card, err := GetCardByID(delivered.CardID)
+	require.NoError(t, err)
+	require.Equal(t, CardShopCardSold, card.Status)
+}
+
+// TestCardShopLatePaymentOnCancelledOrderMarksPaidWhenNoStock 回归测试 #3 兜底：
+// 迟付命中已取消订单且已无可用卡可补发时，应标记 paid（待人工补发/退款）并返回 nil，
+// 不能报错（避免网关 500 重试循环）。
+func TestCardShopLatePaymentOnCancelledOrderMarksPaidWhenNoStock(t *testing.T) {
+	setupCardShopTestDB(t)
+	product := createCardShopProductWithCards(t, []string{"card-a"})
+	order := createReservedCardShopOrder(t, 1, product, "CARDSHOP-1")
+
+	expireAndReleaseCardShopOrder(t, order)
+
+	// 删除唯一可用卡，制造「无库存」。
+	var card Card
+	require.NoError(t, DB.Where("product_id = ?", product.ID).First(&card).Error)
+	require.NoError(t, DeleteCard(card.ID))
+
+	require.NoError(t, CompleteCardOrderPaymentAndDeliver(order.TradeNo, order.ExpectedAmount, order.Currency, order.FlowOrderNo))
+
+	reloaded, err := GetCardOrderByID(order.ID)
+	require.NoError(t, err)
+	require.Equal(t, CardShopOrderPaid, reloaded.Status)
+}
+
+// TestCardShopLatePaymentOnCancelledOrderPropagatesRealDBError 回归测试 #3-Critical：
+// 迟付补偿领卡时遇到真实 DB 错误（非"无库存"）必须上抛以回滚事务并让 webhook 重试，
+// 绝不能被当成无库存吞掉、把订单静默标记 paid（否则用户已扣款却拿不到卡且不再重试）。
+func TestCardShopLatePaymentOnCancelledOrderPropagatesRealDBError(t *testing.T) {
+	setupCardShopTestDB(t)
+	product := createCardShopProductWithCards(t, []string{"card-a"})
+	order := createReservedCardShopOrder(t, 1, product, "CARDSHOP-1")
+	expireAndReleaseCardShopOrder(t, order)
+
+	// 注入真实 DB 错误：删掉卡表，使领卡查询失败（区别于 gorm.ErrRecordNotFound 的"无库存"）。
+	require.NoError(t, DB.Migrator().DropTable(&Card{}))
+
+	err := CompleteCardOrderPaymentAndDeliver(order.TradeNo, order.ExpectedAmount, order.Currency, order.FlowOrderNo)
+	require.Error(t, err, "真实 DB 错误必须上抛，不能被当成无库存吞掉")
+
+	// 订单必须保持 cancelled（事务回滚），不能被静默标记 paid。
+	reloaded, rerr := GetCardOrderByID(order.ID)
+	require.NoError(t, rerr)
+	require.Equal(t, CardShopOrderCancelled, reloaded.Status)
+}

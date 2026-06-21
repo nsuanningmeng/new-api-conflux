@@ -3,6 +3,8 @@ package controller
 import (
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -11,6 +13,33 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 )
+
+// maxCardShopProductPrice 是商品价格上限（主货币单位）。设业务上限既防止管理员误填超大值，
+// 也把价格远控制在 float64 可精确表示的整数范围（2^53）内，避免 minor unit 换算时精度丢失/溢出。
+const maxCardShopProductPrice int64 = 100_000_000
+
+// isValidCardShopImageURL 校验商品图片地址。图片可选（空字符串放行）；非空时必须是 https:// 公网地址，
+// 拒绝回环/私网/链路本地地址与无点主机名——商品页对公网访客可见，避免被入侵管理员用于追踪访客 IP 或探测内网。
+func isValidCardShopImageURL(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return true
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Host == "" {
+		return false
+	}
+	host := u.Hostname()
+	if host == "localhost" || !strings.Contains(host, ".") {
+		return false
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() {
+			return false
+		}
+	}
+	return true
+}
 
 // adminProductRequest 的可选标量字段统一使用指针类型（遵循 Rule 6）：
 // nil 表示客户端未提交该字段、应保留既有值；非 nil 才覆盖。
@@ -62,6 +91,14 @@ func validateAdminProduct(c *gin.Context, product *model.Product) bool {
 	}
 	if product.Price <= 0 {
 		common.ApiErrorMsg(c, "商品价格必须大于0")
+		return false
+	}
+	if product.Price > maxCardShopProductPrice {
+		common.ApiErrorMsg(c, "商品价格超出上限")
+		return false
+	}
+	if !isValidCardShopImageURL(product.ImageURL) {
+		common.ApiErrorMsg(c, "商品图片地址必须是 https:// 公网地址")
 		return false
 	}
 	return true

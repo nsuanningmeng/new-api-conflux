@@ -37,7 +37,9 @@ var (
 	ErrCardShopCryptoSecretRequired = errors.New("未配置 CRYPTO_SECRET 环境变量，禁止导入卡密：请先设置稳定的 CRYPTO_SECRET 并重启，否则重启后已导入卡密将无法解密")
 )
 
-const cardShopOrderTTLSeconds int64 = 30 * 60
+// CardShopOrderTTLSeconds 是卡商城订单的本地有效期（30 分钟）。导出供 controller 在创建
+// 支付请求时设置网关侧 ExpiresIn，使网关支付链接有效期与本地订单 TTL 对齐，避免「迟付」缺口。
+const CardShopOrderTTLSeconds int64 = 30 * 60
 
 var cardShopProductLocks sync.Map
 
@@ -510,7 +512,7 @@ func CreateReservedCardOrder(order *CardOrder) error {
 		order.CreateTime = now
 	}
 	if order.ExpiresAt == 0 {
-		order.ExpiresAt = now + cardShopOrderTTLSeconds
+		order.ExpiresAt = now + CardShopOrderTTLSeconds
 	}
 	if order.Status == "" {
 		order.Status = CardShopOrderPending
@@ -745,13 +747,51 @@ func CompleteCardOrderPaymentAndDeliver(tradeNo string, paidAmount int64, curren
 			if order.Status == CardShopOrderDelivered && order.CardID > 0 {
 				return nil
 			}
+			if strings.TrimSpace(order.FlowOrderNo) == "" {
+				order.FlowOrderNo = strings.TrimSpace(flowOrderNo)
+			}
+			// 迟付补偿：订单本地 TTL 到期会被自动取消并释放其预留卡（releaseExpiredCardOrdersTx）。
+			// 若此后才收到真实支付成功回调，订单已是 cancelled。此时绝不能直接返回 ErrCardShopOrderStatus
+			// ——那会让网关把回调当失败而无限重试，且用户已扣款却拿不到卡。改为：标记已支付，尝试重新
+			// 领取同商品的可用卡发货；若已无可用卡，则保留为 paid 供人工补发/退款对账，并返回 nil 让回调
+			// 不再重试。配合 controller 侧设置网关 ExpiresIn=CardShopOrderTTLSeconds，正常情况下网关会
+			// 先行拒绝迟付，此分支是兜底。
+			if order.Status == CardShopOrderCancelled {
+				// 与下单/删卡路径一致：先 FOR UPDATE 锁 product 行再领卡，确立 product->card 加锁顺序，
+				// 避免与并发下单（先锁 product 再领 available 卡）形成 card/product 反向等待死锁。
+				// 用 Unscoped：商品可能已被软删除，但其已付订单仍须可补发。
+				lockProduct := &Product{}
+				if err := cardShopForUpdate(tx).Unscoped().Where("id = ?", order.ProductID).First(lockProduct).Error; err != nil {
+					if errors.Is(err, gorm.ErrRecordNotFound) {
+						return ErrCardShopProductNotFound
+					}
+					return err
+				}
+				order.Status = CardShopOrderPaid
+				card, claimErr := claimAvailableCardForOrderTx(tx, order.ProductID, order.ID)
+				if claimErr != nil {
+					// 仅「确实无可用卡」才标记 paid 并返回 nil（ACK 网关、停止重试，待人工补发/退款）；
+					// 真实 DB/锁错误必须上抛以回滚事务并让 webhook 重试——绝不能当成无库存吞掉，
+					// 否则订单会被静默标记 paid、用户已扣款却拿不到卡且不再重试。
+					if errors.Is(claimErr, ErrCardShopCardNotFound) || errors.Is(claimErr, ErrCardShopNoStock) {
+						if err := tx.Save(order).Error; err != nil {
+							return err
+						}
+						common.SysLog(fmt.Sprintf("card shop: 迟付命中已取消订单 id=%d trade_no=%s，无可用卡自动补发，已标记 paid 待人工补发/退款", order.ID, order.TradeNo))
+						return nil
+					}
+					return claimErr
+				}
+				order.CardID = card.ID
+				if err := tx.Save(order).Error; err != nil {
+					return err
+				}
+				return deliverCardOrderLocked(tx, order)
+			}
 			if order.Status != CardShopOrderPending && order.Status != CardShopOrderPaid {
 				return ErrCardShopOrderStatus
 			}
 			order.Status = CardShopOrderPaid
-			if strings.TrimSpace(order.FlowOrderNo) == "" {
-				order.FlowOrderNo = strings.TrimSpace(flowOrderNo)
-			}
 			if err := tx.Save(order).Error; err != nil {
 				return err
 			}

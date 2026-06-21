@@ -7,7 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { OrderList } from '@/features/card-shop/components/order-list'
-import { useCardShopOrders } from '@/features/card-shop/hooks/use-card-shop'
+import { useCardShopOrders, useOrderDetail } from '@/features/card-shop/hooks/use-card-shop'
 import { DEFAULT_PAGE_SIZE } from '@/features/card-shop/constants'
 import type { CardShopOrder } from '@/features/card-shop/types'
 
@@ -25,13 +25,30 @@ function MyOrdersPage() {
   const total = data?.data?.total || 0
   const totalPages = Math.ceil(total / DEFAULT_PAGE_SIZE)
 
+  // 已交付订单的卡密只在订单详情接口（GET /orders/:id 的 data.card）返回，列表接口不含；
+  // 因此选中一个已交付订单时再按需拉取详情。传 0 让 useOrderDetail 的 enabled 关闭查询。
+  const detailOrderId = selectedOrder?.status === 'delivered' ? selectedOrder.id : 0
+  const { data: detailData, isLoading: detailLoading, isError: detailError } =
+    useOrderDetail(detailOrderId)
+  const cardContent = detailData?.data?.card?.card_content
+
   const handleCopy = (content: string) => {
-    navigator.clipboard.writeText(content)
-    toast.success(t('Copied to clipboard'))
+    if (!content) return
+    // 在不安全上下文 / 无焦点 / 权限被拒时 writeText 会缺失或 reject——必须捕获并如实反馈，
+    // 不能无条件报告成功（卡密是用户唯一需要可靠拿到的值）。
+    if (!navigator.clipboard?.writeText) {
+      toast.error(t('Copy failed'))
+      return
+    }
+    navigator.clipboard
+      .writeText(content)
+      .then(() => toast.success(t('Copied to clipboard')))
+      .catch(() => toast.error(t('Copy failed')))
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6 max-w-7xl mx-auto">
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="flex flex-col gap-6 p-6 max-w-7xl mx-auto">
       <div className="flex items-center gap-3">
         <HistoryIcon className="size-6 text-primary" />
         <h1 className="text-2xl font-bold">{t('My Orders')}</h1>
@@ -90,19 +107,30 @@ function MyOrdersPage() {
             {selectedOrder?.status === 'delivered' ? (
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t('Card Content')}</label>
-                <div className="relative group">
-                  <pre className="p-4 bg-muted rounded-lg font-mono text-xs whitespace-pre-wrap break-all border overflow-auto max-h-48">
-                    {selectedOrder.card_content || selectedOrder.card_display || t('No content available')}
-                  </pre>
-                  <Button
-                    variant="secondary"
-                    size="icon-xs"
-                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={() => handleCopy(selectedOrder.card_content || selectedOrder.card_display || '')}
-                  >
-                    <ClipboardIcon className="size-3" />
-                  </Button>
-                </div>
+                {detailLoading ? (
+                  <Skeleton className="h-24 w-full rounded-lg" />
+                ) : detailError ? (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+                    {t('Failed to load card details')}
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <pre className="p-4 bg-muted rounded-lg font-mono text-xs whitespace-pre-wrap break-all border overflow-auto max-h-48">
+                      {cardContent || t('No content available')}
+                    </pre>
+                    <Button
+                      variant="secondary"
+                      size="icon-xs"
+                      aria-label={t('Copy')}
+                      title={t('Copy')}
+                      disabled={!cardContent}
+                      className="absolute top-2 right-2"
+                      onClick={() => handleCopy(cardContent || '')}
+                    >
+                      <ClipboardIcon className="size-3" />
+                    </Button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="p-8 text-center text-muted-foreground bg-muted/30 rounded-lg border border-dashed">
@@ -118,6 +146,7 @@ function MyOrdersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   )
 }

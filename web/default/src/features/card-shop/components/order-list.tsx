@@ -11,11 +11,13 @@ import type { CardShopOrder } from '../types'
 interface OrderListProps {
   orders: CardShopOrder[]
   onViewDetails?: (order: CardShopOrder) => void
-  isAdmin?: boolean
 }
 
 export function OrderList({ orders, onViewDetails }: OrderListProps) {
   const { t } = useTranslation()
+  // 仅在提供 onViewDetails 时渲染操作列：管理端「全部订单」未接详情处理器，
+  // 否则会渲染一个点击无反应的死按钮（审查 #8）。
+  const showActions = !!onViewDetails
 
   if (orders.length === 0) {
     return (
@@ -27,7 +29,7 @@ export function OrderList({ orders, onViewDetails }: OrderListProps) {
   }
 
   return (
-    <div className="rounded-md border">
+    <div className="rounded-md border overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
@@ -36,7 +38,7 @@ export function OrderList({ orders, onViewDetails }: OrderListProps) {
             <TableHead>{t('Amount')}</TableHead>
             <TableHead>{t('Status')}</TableHead>
             <TableHead>{t('Time')}</TableHead>
-            <TableHead className="text-right">{t('Actions')}</TableHead>
+            {showActions && <TableHead className="text-right">{t('Actions')}</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -53,16 +55,19 @@ export function OrderList({ orders, onViewDetails }: OrderListProps) {
               <TableCell className="text-xs text-muted-foreground">
                 {format(order.create_time * 1000, 'yyyy-MM-dd HH:mm')}
               </TableCell>
-              <TableCell className="text-right">
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => onViewDetails?.(order)}
-                  title={t('View Details')}
-                >
-                  <EyeIcon className="size-4" />
-                </Button>
-              </TableCell>
+              {showActions && (
+                <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => onViewDetails?.(order)}
+                    aria-label={t('View Details')}
+                    title={t('View Details')}
+                  >
+                    <EyeIcon className="size-4" />
+                  </Button>
+                </TableCell>
+              )}
             </TableRow>
           ))}
         </TableBody>

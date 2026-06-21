@@ -16,6 +16,7 @@ import { Dialog as FormDialog } from '@/components/dialog'
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -24,6 +25,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SettingsSection } from '../components/settings-section'
 import { safeNumberFieldProps } from '../utils/numeric-field'
+import { SafeMarkdown } from '../../card-shop/components/safe-markdown'
 import {
   useAdminCardShopProducts,
   useAdminCreateProduct,
@@ -65,6 +67,7 @@ export function CardShopAdminSection() {
   const products = productsData?.data || []
   const orders = ordersData?.data?.items || []
   const ordersTotal = ordersData?.data?.total || 0
+  const orderTotalPages = Math.ceil(ordersTotal / DEFAULT_PAGE_SIZE)
 
   // 业务失败（success:false）的错误提示由 axios 拦截器统一弹出；这里只在确认成功后弹成功提示，
   // 避免「后端拒绝但前端误报成功」（旧 bug：商品/卡密未真正创建却提示成功）。
@@ -172,7 +175,7 @@ export function CardShopAdminSection() {
                       <Button variant="ghost" size="sm" onClick={() => setEditingProduct(p)}>
                         {t('Edit')}
                       </Button>
-                      <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDeleteProduct(p.id)}>
+                      <Button variant="ghost" size="sm" className="text-destructive" aria-label={t('Delete')} title={t('Delete')} onClick={() => handleDeleteProduct(p.id)}>
                         <TrashIcon className="size-4" />
                       </Button>
                     </TableCell>
@@ -191,7 +194,12 @@ export function CardShopAdminSection() {
                   key={s}
                   variant={orderStatus === s ? 'default' : 'outline'}
                   size="xs"
-                  onClick={() => setOrderStatus(orderStatus === s ? undefined : s)}
+                  onClick={() => {
+                    // 切换筛选必须回到第 1 页，否则停留在旧页码会落到结果更少的状态子集的空页，
+                    // 误显示「No orders found」（审查 #4）。
+                    setOrderStatus(orderStatus === s ? undefined : s)
+                    setOrderPage(1)
+                  }}
                 >
                   {t(s.charAt(0).toUpperCase() + s.slice(1))}
                 </Button>
@@ -205,7 +213,7 @@ export function CardShopAdminSection() {
           {loadingOrders ? (
             <div className="py-8 text-center text-muted-foreground">{t('Loading...')}</div>
           ) : (
-            <OrderList orders={orders} isAdmin />
+            <OrderList orders={orders} />
           )}
 
           <div className="flex justify-center gap-2 mt-4">
@@ -220,7 +228,7 @@ export function CardShopAdminSection() {
             <Button
               variant="outline"
               size="sm"
-              disabled={orders.length < DEFAULT_PAGE_SIZE}
+              disabled={orderPage >= orderTotalPages}
               onClick={() => setOrderPage(p => p + 1)}
             >
               {t('Next')}
@@ -356,9 +364,27 @@ function ProductDialog({ product, open, onClose, onSave, loading }: ProductDialo
             render={({ field }) => (
               <FormItem>
                 <FormLabel>{t('Description')}</FormLabel>
-                <FormControl>
-                  <Textarea {...field} />
-                </FormControl>
+                <Tabs defaultValue="edit">
+                  <TabsList>
+                    <TabsTrigger value="edit">{t('Edit')}</TabsTrigger>
+                    <TabsTrigger value="preview">{t('Preview')}</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="edit">
+                    <FormControl>
+                      <Textarea className="min-h-32 font-mono text-xs" {...field} />
+                    </FormControl>
+                  </TabsContent>
+                  <TabsContent value="preview">
+                    <div className="min-h-32 rounded-md border p-3">
+                      {field.value ? (
+                        <SafeMarkdown>{field.value}</SafeMarkdown>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">{t('Nothing to preview')}</p>
+                      )}
+                    </div>
+                  </TabsContent>
+                </Tabs>
+                <FormDescription>{t('Supports Markdown, HTML and images')}</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -461,6 +487,7 @@ function ManageCardsDialog({
 
   const cards = data?.data?.items || []
   const total = data?.data?.total || 0
+  const cardTotalPages = Math.ceil(total / DEFAULT_PAGE_SIZE)
 
   const handleDeleteCard = async (cardId: number) => {
     if (!confirm(t('Are you sure you want to delete this card?'))) return
@@ -507,8 +534,9 @@ function ManageCardsDialog({
                         variant="ghost"
                         size="sm"
                         className="text-destructive"
+                        aria-label={t('Delete')}
                         disabled={card.status !== 'available' || deleteCard.isPending}
-                        title={card.status !== 'available' ? t('Only unsold cards can be deleted') : undefined}
+                        title={card.status !== 'available' ? t('Only unsold cards can be deleted') : t('Delete')}
                         onClick={() => handleDeleteCard(card.id)}
                       >
                         <TrashIcon className="size-4" />
@@ -527,7 +555,7 @@ function ManageCardsDialog({
             <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>
               {t('Previous')}
             </Button>
-            <Button variant="outline" size="sm" disabled={cards.length < DEFAULT_PAGE_SIZE} onClick={() => setPage(p => p + 1)}>
+            <Button variant="outline" size="sm" disabled={page >= cardTotalPages} onClick={() => setPage(p => p + 1)}>
               {t('Next')}
             </Button>
           </div>

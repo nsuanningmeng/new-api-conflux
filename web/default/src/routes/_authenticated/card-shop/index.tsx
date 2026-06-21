@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { ShoppingBagIcon, ZapIcon, ShieldCheckIcon, RefreshCwIcon, HistoryIcon, PackageOpenIcon } from 'lucide-react'
@@ -6,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { ProductCard } from '@/features/card-shop/components/product-card'
+import { ProductDetailDialog } from '@/features/card-shop/components/product-detail-dialog'
 import { useCardShopProducts, useCreateOrder } from '@/features/card-shop/hooks/use-card-shop'
 import type { CardShopProduct } from '@/features/card-shop/types'
 
@@ -17,6 +19,7 @@ function CardShopPage() {
   const { t } = useTranslation()
   const { data, isLoading } = useCardShopProducts()
   const createOrder = useCreateOrder()
+  const [selectedProduct, setSelectedProduct] = useState<CardShopProduct | null>(null)
 
   const products = data?.data || []
 
@@ -26,7 +29,7 @@ function CardShopPage() {
       // 仅处理成功路径；业务失败（success:false）与网络错误均由 axios 拦截器统一弹出 res.message，避免重复 toast。
       if (res.success && res.data) {
         const url = res.data.payment_url || res.data.checkout_url
-        if (url && isSafeHttpPaymentUrl(url)) {
+        if (url && isSafeHttpPaymentUrl(url, true)) {
           window.location.href = url
         } else {
           toast.success(t('Order created successfully'))
@@ -38,8 +41,9 @@ function CardShopPage() {
   }
 
   return (
-    <div className="flex flex-col gap-8 p-6 max-w-7xl mx-auto">
-      {/* Hero banner — 突出 AI 账号商城卖点 */}
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="flex flex-col gap-8 p-6 max-w-7xl mx-auto">
+        {/* Hero banner — 突出 AI 账号商城卖点 */}
       <section className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-6 sm:p-8">
         <Button
           variant="outline"
@@ -83,6 +87,7 @@ function CardShopPage() {
               key={product.id}
               product={product}
               onBuy={handleBuy}
+              onViewDetails={setSelectedProduct}
               loading={createOrder.isPending}
             />
           ))}
@@ -93,6 +98,15 @@ function CardShopPage() {
           <p className="text-lg">{t('No products available at the moment')}</p>
         </div>
       )}
+
+      <ProductDetailDialog
+        product={selectedProduct}
+        open={!!selectedProduct}
+        onClose={() => setSelectedProduct(null)}
+        onBuy={handleBuy}
+        loading={createOrder.isPending}
+      />
+      </div>
     </div>
   )
 }
