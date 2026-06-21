@@ -7,6 +7,7 @@ import type {
   CreateOrderResponse,
   OrdersResponse,
   OrderDetailResponse,
+  CardImportPreview,
 } from './types'
 
 export async function getCardShopProducts(): Promise<ProductsResponse> {
@@ -67,6 +68,16 @@ export async function adminDeleteProduct(id: number): Promise<ApiResponse<null>>
 
 export async function adminImportCards(productId: number, cards: string[]): Promise<ApiResponse<{ count: number; skipped: number }>> {
   const res = await api.post(`/api/user/cardshop/product/${productId}/cards`, { cards })
+  return res.data
+}
+
+// 导入试算（只读、不写入）：返回 total/batch_dup/existing_dup/new_count，让导入框在导入前把
+// 「将导入张数」精确到与入库数一致——尤其覆盖前端无从预判的「与既有库存重复」部分。
+export async function adminPreviewImportCards(
+  productId: number,
+  cards: string[]
+): Promise<ApiResponse<CardImportPreview>> {
+  const res = await api.post(`/api/user/cardshop/product/${productId}/cards/preview`, { cards })
   return res.data
 }
 

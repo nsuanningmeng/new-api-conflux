@@ -35,7 +35,14 @@ var (
 	// ErrCardShopCryptoSecretRequired 在未显式配置 CRYPTO_SECRET 时拒绝写入卡密，
 	// 避免使用启动随机密钥加密导致重启后卡密永久不可解密。
 	ErrCardShopCryptoSecretRequired = errors.New("未配置 CRYPTO_SECRET 环境变量，禁止导入卡密：请先设置稳定的 CRYPTO_SECRET 并重启，否则重启后已导入卡密将无法解密")
+	// ErrCardShopImportBatchTooLarge 限制单次导入/试算的卡密行数，防御超大请求体。
+	ErrCardShopImportBatchTooLarge = errors.New("单次卡密数量过多，请分批导入")
 )
+
+// maxCardImportBatch 是单次导入/试算允许的最大卡密行数上限。试算接口会被前端在编辑时高频调用，
+// 超大请求体会放大内存占用与既有卡密解密开销，故对导入与试算两条路径统一设上限。取值足够宽松，
+// 不影响正常批量导入（远超任何真实单次粘贴量）。
+const maxCardImportBatch = 100000
 
 // CardShopOrderTTLSeconds 是卡商城订单的本地有效期（30 分钟）。导出供 controller 在创建
 // 支付请求时设置网关侧 ExpiresIn，使网关支付链接有效期与本地订单 TTL 对齐，避免「迟付」缺口。
@@ -281,6 +288,9 @@ func BatchCreateCards(productID int64, cards []string) (added int, skipped int, 
 	if len(cards) == 0 {
 		return 0, 0, errors.New("卡密不能为空")
 	}
+	if len(cards) > maxCardImportBatch {
+		return 0, 0, ErrCardShopImportBatchTooLarge
+	}
 
 	// 规范化 + 批次内按指纹去重（同一次粘贴里重复的卡密只保留一张）。
 	type pendingCard struct {
@@ -320,9 +330,10 @@ func BatchCreateCards(productID int64, cards []string) (added int, skipped int, 
 				return err
 			}
 			// 构建该商品已存在卡密的指纹集合：逐张解密后计算同一 HMAC 指纹。
+			// 仅取 card_content 一列（去重只需密文），避免加载整行降低大库存下的开销。
 			existing := make(map[string]struct{})
 			var existCards []Card
-			if err := tx.Where("product_id = ?", productID).Find(&existCards).Error; err != nil {
+			if err := tx.Select("card_content").Where("product_id = ?", productID).Find(&existCards).Error; err != nil {
 				return err
 			}
 			for i := range existCards {
@@ -365,6 +376,93 @@ func BatchCreateCards(productID int64, cards []string) (added int, skipped int, 
 		return 0, 0, err
 	}
 	return added, skipped, nil
+}
+
+// CardImportPreview 是「导入试算」结果：在不写入任何数据的前提下，按与 BatchCreateCards
+// 完全一致的规范化 + 去重口径，预估本批将真正入库的张数，使前端「将导入张数」可精确等于入库数。
+//
+//	Total       = 去首尾空白、去空行后的总张数（未去重）
+//	BatchDup    = 批内重复（同一批里重复出现）被合并的张数
+//	ExistingDup = 与该商品既有库存（按指纹）重复、将被后端跳过的张数
+//	NewCount    = 预计新增入库数 = Total - BatchDup - ExistingDup
+type CardImportPreview struct {
+	Total       int `json:"total"`
+	BatchDup    int `json:"batch_dup"`
+	ExistingDup int `json:"existing_dup"`
+	NewCount    int `json:"new_count"`
+}
+
+// PreviewImportCards 试算一批卡密的导入结果（只读、绝不写入）。去重口径与 BatchCreateCards
+// 保持严格一致：先按指纹（GenerateHMAC 明文）做批内去重，再与该商品既有卡密的指纹集合比对。
+// 与既有库存的去重是前端无法自行完成的部分——卡密以 AES 密文存储、列表接口只返回掩码，前端
+// 拿不到明文也算不出指纹，故必须由后端试算。
+//
+// 注意：这是「尽力而为」的预估——它在事务外读取既有卡密快照，真正导入仍以 BatchCreateCards
+// 在行锁下的再次判重为准；在单管理员顺序操作（导入前试算、随即导入）的常态下两者一致。
+func PreviewImportCards(productID int64, cards []string) (*CardImportPreview, error) {
+	// 与 BatchCreateCards 一致：未显式配置 CRYPTO_SECRET 时导入会被拒绝，故试算也返回同一错误，
+	// 让前端行为与「真正导入」对齐（前端会在试算失败时回退到本地批内去重计数）。
+	if !common.CryptoSecretExplicitlyConfigured {
+		return nil, ErrCardShopCryptoSecretRequired
+	}
+	if productID <= 0 {
+		return nil, errors.New("商品ID不能为空")
+	}
+	if len(cards) > maxCardImportBatch {
+		return nil, ErrCardShopImportBatchTooLarge
+	}
+	// 校验商品存在（含软删除排除），使「试算 NewCount == 实际入库数」这一不变式在直接调用模型时
+	// 也成立——BatchCreateCards 会在锁内对不存在/已删除商品返回 ErrCardShopProductNotFound，
+	// 试算据此与导入路径对齐（此处为只读快照校验，非锁内）。
+	if _, err := GetProductByID(productID); err != nil {
+		return nil, err
+	}
+
+	preview := &CardImportPreview{}
+	// 规范化 + 批内按指纹去重（与 BatchCreateCards 的同一段逻辑保持口径一致）。
+	batchSeen := make(map[string]struct{}, len(cards))
+	fingerprints := make([]string, 0, len(cards))
+	for _, rawCard := range cards {
+		content := strings.TrimSpace(rawCard)
+		if content == "" {
+			continue
+		}
+		preview.Total++
+		fp := common.GenerateHMAC(content)
+		if _, dup := batchSeen[fp]; dup {
+			preview.BatchDup++
+			continue
+		}
+		batchSeen[fp] = struct{}{}
+		fingerprints = append(fingerprints, fp)
+	}
+	if len(fingerprints) == 0 {
+		return preview, nil
+	}
+
+	// 构建该商品既有卡密指纹集合：逐张解密后计算同一 HMAC 指纹（与 BatchCreateCards 一致，
+	// 历史卡密若因密钥不一致/损坏无法解密则跳过其比对，不影响本次试算）。
+	existing := make(map[string]struct{})
+	var existCards []Card
+	// 仅取 card_content 一列：去重只需密文，避免在大库存商品上加载整行（前端会高频触发试算）。
+	if err := DB.Select("card_content").Where("product_id = ?", productID).Find(&existCards).Error; err != nil {
+		return nil, err
+	}
+	for i := range existCards {
+		plain, derr := common.AESDecrypt(existCards[i].CardContent)
+		if derr != nil {
+			continue
+		}
+		existing[common.GenerateHMAC(plain)] = struct{}{}
+	}
+	for _, fp := range fingerprints {
+		if _, dup := existing[fp]; dup {
+			preview.ExistingDup++
+			continue
+		}
+		preview.NewCount++
+	}
+	return preview, nil
 }
 
 func claimAvailableCardForOrderTx(tx *gorm.DB, productID int64, orderID int64) (*Card, error) {

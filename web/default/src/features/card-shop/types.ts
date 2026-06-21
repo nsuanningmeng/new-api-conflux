@@ -40,6 +40,15 @@ export interface CardShopOrderCardDetail {
   status: 'available' | 'sold' | 'reserved'
 }
 
+// 导入试算结果：后端按与真正导入一致的去重口径（批内 + 与既有库存）预估将入库的张数，
+// 使前端「将导入张数」可精确等于入库数。new_count = total - batch_dup - existing_dup。
+export interface CardImportPreview {
+  total: number
+  batch_dup: number
+  existing_dup: number
+  new_count: number
+}
+
 // API Response types
 export type ProductsResponse = ApiResponse<CardShopProduct[]>
 export type ProductResponse = ApiResponse<CardShopProduct>

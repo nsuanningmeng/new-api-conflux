@@ -146,6 +146,7 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.PUT("/cardshop/product/:id", controller.AdminUpdateProduct)
 				adminRoute.DELETE("/cardshop/product/:id", controller.AdminDeleteProduct)
 				adminRoute.POST("/cardshop/product/:id/cards", controller.AdminImportCards)
+				adminRoute.POST("/cardshop/product/:id/cards/preview", controller.AdminPreviewImportCards)
 				adminRoute.GET("/cardshop/product/:id/cards", controller.AdminListCards)
 				adminRoute.DELETE("/cardshop/card/:id", controller.AdminDeleteCard)
 				adminRoute.GET("/cardshop/products", controller.AdminGetAllProducts)

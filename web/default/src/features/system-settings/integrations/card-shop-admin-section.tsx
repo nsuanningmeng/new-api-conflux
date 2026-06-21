@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PlusIcon, TrashIcon, DownloadIcon, HistoryIcon, PackageIcon, ListIcon } from 'lucide-react'
 import { toast } from 'sonner'
@@ -38,7 +38,8 @@ import {
 } from '../../card-shop/hooks/use-card-shop'
 import { OrderList } from '../../card-shop/components/order-list'
 import { DEFAULT_PAGE_SIZE } from '../../card-shop/constants'
-import type { CardShopProduct } from '../../card-shop/types'
+import { adminPreviewImportCards } from '../../card-shop/api'
+import type { CardShopProduct, CardImportPreview } from '../../card-shop/types'
 
 // 卡密状态 -> 展示标签 + Badge 样式。标签经 t() 翻译。
 const CARD_STATUS_META: Record<string, { label: string; variant: 'secondary' | 'outline' | 'default' }> = {
@@ -98,7 +99,11 @@ export function CardShopAdminSection() {
   const handleImportCards = async (values: { cards: string }) => {
     if (!importingProduct) return
     try {
-      const cardList = (values.cards as string).split('\n').map((s: string) => s.trim()).filter(Boolean)
+      // 批内去重后再提交：与导入框实时计数口径一致，也减小请求体。后端仍会再次去重并与既有
+      // 库存按指纹比对（幂等兜底），故这里去重只去「批内重复」，不影响「与既有库存重复」的 skipped。
+      const cardList = Array.from(new Set(
+        (values.cards as string).split('\n').map((s: string) => s.trim()).filter(Boolean)
+      ))
       const res = await importCards.mutateAsync({ productId: importingProduct.id, cards: cardList })
       if (res?.success) {
         const added = res.data?.count ?? 0
@@ -433,12 +438,75 @@ function ProductDialog({ product, open, onClose, onSave, loading }: ProductDialo
 
 function ImportDialog({ product, open, onClose, onSave, loading }: any) {
   const { t } = useTranslation()
-  const { register, handleSubmit, reset } = useForm({ defaultValues: { cards: '' } })
+  const { register, handleSubmit, reset, watch } = useForm({ defaultValues: { cards: '' } })
   // 弹窗实例不会卸载（仅靠 open 显隐），每次打开或切换商品时清空文本框，
   // 否则上次导入的卡密会残留在输入框，管理员可能误把同一批卡密重复导入两遍。
   useEffect(() => {
     if (open) reset({ cards: '' })
   }, [open, product?.id, reset])
+
+  // 解析卡密文本：按 \n 拆 → 去首尾空白 → 去空行 → 批内去重（Set）。拆分/去空白口径与提交时
+  // handleImportCards、后端 BatchCreateCards 完全一致，故去重后的 unique 即「本批将写入的张数」。
+  // 软换行（视觉折行）不含 \n、不计入，从根本上区分折行与真换行。
+  // 注：仅当这些卡密未与该商品既有库存重复时，detectedCount 才与入库数完全相等；与既有库存重复的
+  // 部分由后端按指纹再跳过（前端拿不到既有卡密明文，无从预判），导入后的成功提示会报 skipped。
+  const cardsValue = watch('cards') || ''
+  // useMemo：大批量导入时避免每次渲染都重复 split/trim/Set。
+  const parsedCards = useMemo(() => {
+    const lines = cardsValue.split('\n').map((s: string) => s.trim()).filter(Boolean)
+    const unique = Array.from(new Set(lines))
+    return { unique, dupes: lines.length - unique.length }
+  }, [cardsValue])
+  const detectedCount = parsedCards.unique.length
+
+  // 服务端试算：把「将导入张数」精确到与入库数一致——含与该商品既有库存的去重（前端拿不到既有
+  // 卡密明文、无法自行预判，故交由后端按指纹试算）。serverPreview 同时记录它对应的「商品 productId」
+  // 与「输入文本 forValue」，仅当两者都匹配当前状态时才采用——避免切换商品（文本恰好相同）或文本
+  // 变化后短暂串台/展示过期的精确值（防抖期间回退本地计数）。
+  // 防抖 400ms；cancelled 闸门丢弃过期/竞态响应；任何失败（含未配 CRYPTO_SECRET、网络错误）都
+  // 回退到本地批内去重计数，保证计数永不卡死 UI——试算只是把「可能更少」增强为「精确值」。
+  const [serverPreview, setServerPreview] = useState<{ productId: number; forValue: string; data: CardImportPreview } | null>(null)
+  const [previewing, setPreviewing] = useState(false)
+  useEffect(() => {
+    if (!open || !product?.id) {
+      setServerPreview(null)
+      setPreviewing(false)
+      return
+    }
+    const productId = product.id
+    const lines = cardsValue.split('\n').map((s: string) => s.trim()).filter(Boolean)
+    if (lines.length === 0) {
+      setServerPreview(null)
+      setPreviewing(false)
+      return
+    }
+    let cancelled = false
+    setPreviewing(true)
+    const handle = setTimeout(() => {
+      adminPreviewImportCards(productId, lines)
+        .then((res) => {
+          if (cancelled) return
+          setServerPreview(res?.success && res.data ? { productId, forValue: cardsValue, data: res.data } : null)
+        })
+        .catch(() => {
+          if (!cancelled) setServerPreview(null)
+        })
+        .finally(() => {
+          if (!cancelled) setPreviewing(false)
+        })
+    }, 400)
+    return () => {
+      cancelled = true
+      clearTimeout(handle)
+    }
+  }, [open, product?.id, cardsValue])
+
+  // 仅当试算结果同时匹配「当前商品」与「当前文本」时才采信精确值；否则（计算中/失败/文本或商品已变）
+  // 回退本地批内去重计数。
+  const exactPreview =
+    serverPreview && serverPreview.productId === product?.id && serverPreview.forValue === cardsValue
+      ? serverPreview.data
+      : null
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -449,12 +517,39 @@ function ImportDialog({ product, open, onClose, onSave, loading }: any) {
         </DialogHeader>
         <form onSubmit={handleSubmit(onSave)} className="space-y-4">
           <div className="grid gap-2">
-            <Label>{t('Card Secrets')}</Label>
+            <Label htmlFor="card-import-textarea">{t('Card Secrets')}</Label>
+            {/* wrap="off" + whitespace-pre + 横向滚动：关闭浏览器软换行，使「视觉行数 == 真实行数」，
+                每行恰好一张卡，超长卡密横向滚动而非折到下一行，消除「折行被误当成多张卡」的混淆。
+                w-full（基础组件已设）固定宽度，field-sizing 不会按超长内容撑宽，仅纵向随内容增高。
+                aria-describedby 把下方实时张数回显关联到输入框，供读屏软件读出。 */}
             <Textarea
+              id="card-import-textarea"
+              aria-describedby="card-import-count"
               placeholder={t('One card per line')}
-              className="min-h-64 font-mono text-xs"
+              wrap="off"
+              className="min-h-64 font-mono text-xs whitespace-pre overflow-x-auto"
               {...register('cards', { required: true })}
             />
+            {/* 张数回显：试算就绪时显示「将导入 N 张」（N 精确等于入库数，含与既有库存去重）；
+                试算中/失败时回退「检测到 N 张」（本地批内去重计数），并在试算进行中附「核对库存中…」
+                让管理员知道精确值正在计算。数字异常即说明有卡密被真实换行切开。
+                role=status + aria-live=polite：计数变化以低打扰方式播报给读屏软件。 */}
+            <p id="card-import-count" role="status" aria-live="polite" className="text-xs text-muted-foreground">
+              {exactPreview
+                ? (exactPreview.batch_dup + exactPreview.existing_dup > 0
+                    ? t('Will import {{num}} cards (excluded {{batchDup}} in-batch + {{existingDup}} already in stock)', {
+                        num: exactPreview.new_count,
+                        batchDup: exactPreview.batch_dup,
+                        existingDup: exactPreview.existing_dup,
+                      })
+                    : t('Will import {{num}} cards', { num: exactPreview.new_count }))
+                : (parsedCards.dupes > 0
+                    ? t('Detected {{num}} cards ({{dupes}} duplicates merged)', { num: detectedCount, dupes: parsedCards.dupes })
+                    : t('Detected {{num}} cards', { num: detectedCount }))}
+              {!exactPreview && previewing && detectedCount > 0 && (
+                <span className="ml-1 opacity-70">{t('Checking stock...')}</span>
+              )}
+            </p>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>{t('Cancel')}</Button>

@@ -209,6 +209,41 @@ func AdminImportCards(c *gin.Context) {
 	common.ApiSuccess(c, gin.H{"count": added, "skipped": skipped})
 }
 
+// AdminPreviewImportCards 试算一批卡密的导入结果（只读、不写入），返回
+// {total, batch_dup, existing_dup, new_count}，供前端在导入前把「将导入张数」精确到与入库数一致
+// ——尤其是「与该商品既有库存重复」这部分，前端拿不到既有卡密明文、无法自行预判，须由后端试算。
+// 与导入接口不同：空卡密不视为错误（管理员清空输入框时返回全 0），避免试算在编辑过程中频繁报错。
+func AdminPreviewImportCards(c *gin.Context) {
+	productID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || productID <= 0 {
+		common.ApiErrorMsg(c, "无效的商品ID")
+		return
+	}
+
+	var req adminImportCardsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+
+	if _, err := model.GetProductByID(productID); err != nil {
+		common.ApiErrorMsg(c, "商品不存在")
+		return
+	}
+
+	preview, err := model.PreviewImportCards(productID, req.Cards)
+	if err != nil {
+		// 与导入接口一致：未配置 CRYPTO_SECRET 时明确报错（前端据此回退到本地计数）。
+		if errors.Is(err, model.ErrCardShopCryptoSecretRequired) {
+			common.ApiErrorMsg(c, err.Error())
+			return
+		}
+		common.ApiErrorMsg(c, "试算失败")
+		return
+	}
+	common.ApiSuccess(c, preview)
+}
+
 // AdminListCards 返回某商品下的卡密列表（分页，掩码展示），用于管理端「管理卡密」。
 func AdminListCards(c *gin.Context) {
 	productID, err := strconv.ParseInt(c.Param("id"), 10, 64)

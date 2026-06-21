@@ -215,6 +215,72 @@ func TestCardShopImportDeduplicatesCards(t *testing.T) {
 	require.Equal(t, 3, reloaded.Stock)
 }
 
+// TestCardShopPreviewImportCardsMatchesActualImport 验证导入试算的核心不变式：
+// PreviewImportCards 返回的 NewCount 必须严格等于随后 BatchCreateCards 的实际新增数，
+// 且 total/batch_dup/existing_dup 三个分量与去重口径一致（前端据此把「将导入张数」精确到入库数）。
+func TestCardShopPreviewImportCardsMatchesActualImport(t *testing.T) {
+	setupCardShopTestDB(t)
+	product := &Product{Name: "test product", Price: 10, Enabled: true}
+	require.NoError(t, CreateProduct(product))
+
+	// 先导入一张 card-a，建立既有库存。
+	added, _, err := BatchCreateCards(product.ID, []string{"card-a"})
+	require.NoError(t, err)
+	require.Equal(t, 1, added)
+
+	// 试算一批：" card-a "（去空白后与库存重复）、card-b（新、批内重复两次）、card-c（新）。
+	// 期望：Total=4，BatchDup=1（多出的 card-b），ExistingDup=1（card-a），NewCount=2（card-b、card-c）。
+	batch := []string{" card-a ", "card-b", "card-b", "card-c"}
+	preview, err := PreviewImportCards(product.ID, batch)
+	require.NoError(t, err)
+	require.Equal(t, 4, preview.Total)
+	require.Equal(t, 1, preview.BatchDup)
+	require.Equal(t, 1, preview.ExistingDup)
+	require.Equal(t, 2, preview.NewCount)
+
+	// 试算不写入任何数据：库存仍为 1。
+	var availBefore int64
+	require.NoError(t, DB.Model(&Card{}).Where("product_id = ? AND status = ?", product.ID, CardShopCardAvailable).Count(&availBefore).Error)
+	require.Equal(t, int64(1), availBefore)
+
+	// 关键不变式：试算 NewCount == 真正导入的新增数（口径一致）。
+	actualAdded, actualSkipped, err := BatchCreateCards(product.ID, batch)
+	require.NoError(t, err)
+	require.Equal(t, preview.NewCount, actualAdded)
+	require.Equal(t, preview.BatchDup+preview.ExistingDup, actualSkipped)
+}
+
+// TestCardShopPreviewImportRequiresExplicitCryptoSecret 验证试算与导入同口径：
+// 未显式配置 CRYPTO_SECRET 时试算同样被拒绝（前端据此回退本地计数，不误报精确值）。
+func TestCardShopPreviewImportRequiresExplicitCryptoSecret(t *testing.T) {
+	setupCardShopTestDB(t)
+	common.CryptoSecretExplicitlyConfigured = false
+	product := &Product{Name: "test product", Price: 10, Enabled: true}
+	require.NoError(t, CreateProduct(product))
+
+	_, err := PreviewImportCards(product.ID, []string{"card-a"})
+	require.ErrorIs(t, err, ErrCardShopCryptoSecretRequired)
+}
+
+// TestCardShopPreviewImportEmptyReturnsZero 验证空输入（管理员清空输入框）返回全 0 而非报错。
+func TestCardShopPreviewImportEmptyReturnsZero(t *testing.T) {
+	setupCardShopTestDB(t)
+	product := &Product{Name: "test product", Price: 10, Enabled: true}
+	require.NoError(t, CreateProduct(product))
+
+	preview, err := PreviewImportCards(product.ID, []string{"  ", "", "\t"})
+	require.NoError(t, err)
+	require.Equal(t, &CardImportPreview{}, preview)
+}
+
+// TestCardShopPreviewImportMissingProductReturnsError 验证试算对不存在/已删除商品返回
+// ErrCardShopProductNotFound（与导入路径在锁内的商品校验对齐），使不变式在商品缺失时也成立。
+func TestCardShopPreviewImportMissingProductReturnsError(t *testing.T) {
+	setupCardShopTestDB(t)
+	_, err := PreviewImportCards(99999, []string{"card-a"})
+	require.ErrorIs(t, err, ErrCardShopProductNotFound)
+}
+
 func TestCardShopLegacyTableRenameMigratesData(t *testing.T) {
 	oldDB := DB
 	oldSQLite := common.UsingSQLite
