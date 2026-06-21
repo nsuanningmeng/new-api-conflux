@@ -52,6 +52,12 @@ type Product struct {
 	SortOrder   int    `json:"sort_order" gorm:"default:0"`
 	CreatedAt   int64  `json:"created_at" gorm:"autoCreateTime:milli"`
 	UpdatedAt   int64  `json:"updated_at" gorm:"autoUpdateTime:milli"`
+	// DeletedAt 启用 GORM 原生软删除：DeleteProduct 改用 DB.Delete 后，所有普通
+	// Find/First 会自动追加 `deleted_at IS NULL`，已删除商品同时从管理端列表与前台
+	// storefront 排除（修复「删除提示成功但商品仍在管理端列表」）。软删除而非硬删除是
+	// 为了保留商品行不影响历史订单，且不触碰 card_shop_cards（已售卡密继续可被已交付
+	// 订单详情解密展示）。json:"-" 不向前端暴露该字段。
+	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
 type Card struct {
@@ -183,11 +189,20 @@ func UpdateProduct(product *Product) error {
 	return DB.Save(product).Error
 }
 
+// DeleteProduct 软删除一个商品（设置 deleted_at）。借助 Product.DeletedAt 字段，
+// GORM 会把该行从之后所有普通 Find/First 查询中自动排除——管理端 GetAllProducts 与
+// 前台 GetAllEnabledProducts 同时不再返回它，从根本上修复「删除成功但商品仍在列表」。
+// 注意：
+//   - 仅删商品行，不级联删除 card_shop_cards：已售(sold)卡仍需供已交付订单详情解密展示，
+//     未售(available/reserved)卡随商品被排除后也无法再被下单（reserve 走 GetProductByID/
+//     enabled 过滤，软删除商品已查不到），无需手动清理。
+//   - 进行中的已支付订单不依赖 Product 行（发卡只操作 order+card），软删除后仍可正常发卡。
+//   - 可逆：必要时用 DB.Unscoped() 恢复。
 func DeleteProduct(id int64) error {
 	if id <= 0 {
 		return errors.New("商品ID不能为空")
 	}
-	result := DB.Model(&Product{}).Where("id = ?", id).Update("enabled", false)
+	result := DB.Delete(&Product{}, id)
 	if result.Error != nil {
 		return result.Error
 	}

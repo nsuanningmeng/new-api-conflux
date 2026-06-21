@@ -244,3 +244,50 @@ func TestCardShopLegacyTableRenameMigratesData(t *testing.T) {
 	require.NoError(t, renameCardShopLegacyTables())
 	require.True(t, DB.Migrator().HasTable("card_shop_products"))
 }
+
+// TestCardShopDeleteProductHidesFromListsButKeepsDeliveredCard 回归测试：
+// 删除商品后必须同时从「管理端列表」与「前台 storefront」消失（修复「删除成功但商品仍在」），
+// 同时已交付订单的已售卡密必须仍可解密展示（软删除不级联删除 card_shop_cards）。
+func TestCardShopDeleteProductHidesFromListsButKeepsDeliveredCard(t *testing.T) {
+	setupCardShopTestDB(t)
+	product := createCardShopProductWithCards(t, []string{"card-a"})
+	order := createReservedCardShopOrder(t, 1, product, "CARDSHOP-1")
+	require.NoError(t, CompleteCardOrderPaymentAndDeliver(order.TradeNo, order.ExpectedAmount, order.Currency, order.FlowOrderNo))
+
+	require.NoError(t, DeleteProduct(product.ID))
+
+	// 管理端列表不再返回该商品（此前 GetAllProducts 无 enabled/deleted 过滤 -> bug 根因）
+	all, err := GetAllProducts()
+	require.NoError(t, err)
+	for _, p := range all {
+		require.NotEqual(t, product.ID, p.ID, "deleted product must not appear in admin list")
+	}
+
+	// 前台 storefront 不再返回该商品
+	enabled, err := GetAllEnabledProducts()
+	require.NoError(t, err)
+	for _, p := range enabled {
+		require.NotEqual(t, product.ID, p.ID, "deleted product must not appear in storefront")
+	}
+
+	// 按 ID 查询视为不存在（GORM 软删除默认作用域自动排除）
+	_, err = GetProductByID(product.ID)
+	require.ErrorIs(t, err, ErrCardShopProductNotFound)
+
+	// 已交付订单的已售卡密仍可解密展示（未被级联删除）
+	reloadedOrder, err := GetCardOrderByID(order.ID)
+	require.NoError(t, err)
+	require.Equal(t, CardShopOrderDelivered, reloadedOrder.Status)
+	card, err := GetCardByID(reloadedOrder.CardID)
+	require.NoError(t, err)
+	require.Equal(t, "card-a", card.CardContent)
+	require.Equal(t, CardShopCardSold, card.Status)
+
+	// 商品行仍物理存在、仅 deleted_at 被置位（可逆）
+	var cnt int64
+	require.NoError(t, DB.Unscoped().Model(&Product{}).Where("id = ?", product.ID).Count(&cnt).Error)
+	require.Equal(t, int64(1), cnt)
+
+	// 重复删除：软删除行不再匹配默认作用域 -> 视为未找到
+	require.ErrorIs(t, DeleteProduct(product.ID), ErrCardShopProductNotFound)
+}

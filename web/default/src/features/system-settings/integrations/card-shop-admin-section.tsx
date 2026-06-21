@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { PlusIcon, TrashIcon, DownloadIcon, HistoryIcon, PackageIcon, ListIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
+import * as z from 'zod'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,8 +12,18 @@ import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
+import { Dialog as FormDialog } from '@/components/dialog'
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SettingsSection } from '../components/settings-section'
+import { safeNumberFieldProps } from '../utils/numeric-field'
 import {
   useAdminCardShopProducts,
   useAdminCreateProduct,
@@ -245,65 +257,151 @@ export function CardShopAdminSection() {
   )
 }
 
-function ProductDialog({ product, open, onClose, onSave, loading }: any) {
-  const { t } = useTranslation()
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm({
-    // 合并默认值：新建时 product 为 {}，需提供空白默认值，否则必填校验无法对未填字段生效。
-    values: { name: '', description: '', price: 0, image_url: '', ...(product ?? {}) },
+const PRODUCT_FORM_ID = 'card-shop-product-form'
+
+// 与同目录其它编辑弹窗（creem-product-dialog / payment-method-dialog）保持一致：
+// 用 zod + zodResolver 做校验，配合共享 Form/FormField/FormItem 渲染。
+const createProductDialogSchema = (t: (key: string) => string) =>
+  z.object({
+    name: z.string().min(1, t('Product name is required')),
+    description: z.string(),
+    price: z.number().min(1, t('Price must be greater than 0')),
+    image_url: z.string(),
   })
 
+type ProductDialogFormValues = z.infer<ReturnType<typeof createProductDialogSchema>>
+
+type ProductDialogProps = {
+  product: Partial<CardShopProduct> | null
+  open: boolean
+  onClose: () => void
+  onSave: (values: Record<string, unknown>) => void
+  loading: boolean
+}
+
+function ProductDialog({ product, open, onClose, onSave, loading }: ProductDialogProps) {
+  const { t } = useTranslation()
+  const isEditMode = !!product?.id
+
+  // 对齐规范：共享 Dialog（title/footer props）+ Form/FormField + zodResolver，
+  // 替换此前手写的 DialogContent/Label/Input + register 裸结构。
+  const form = useForm<ProductDialogFormValues>({
+    resolver: zodResolver(createProductDialogSchema(t)),
+    defaultValues: { name: '', description: '', price: 0, image_url: '' },
+  })
+
+  // 弹窗实例不会卸载（仅靠 open 显隐）：每次打开或切换商品时用最新值重置，
+  // 否则上次编辑的字段会残留到「新建」或另一个商品的表单。
+  useEffect(() => {
+    if (open) {
+      form.reset({
+        name: product?.name ?? '',
+        description: product?.description ?? '',
+        price: product?.price ?? 0,
+        image_url: product?.image_url ?? '',
+      })
+    }
+  }, [open, product, form])
+
+  // 透传 id 以便父组件区分「新建」与「更新」；成功后由父组件关闭弹窗
+  // （失败时保持打开，避免用户重填）。
+  const handleSave = (values: ProductDialogFormValues) => {
+    onSave(isEditMode ? { ...values, id: product?.id } : values)
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{product?.id ? t('Edit Product') : t('New Product')}</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit(onSave)} className="space-y-4">
-          <div className="grid gap-2">
-            <Label>
-              {t('Product Name')} <span className="text-destructive">*</span>
-            </Label>
-            <Input {...register('name', { required: t('Product name is required') as string })} />
-            {errors.name && <p className="text-xs text-destructive">{errors.name.message as string}</p>}
+    <FormDialog
+      open={open}
+      onOpenChange={(o: boolean) => { if (!o) onClose() }}
+      title={isEditMode ? t('Edit Product') : t('New Product')}
+      contentClassName="sm:max-w-[500px]"
+      contentHeight="auto"
+      bodyClassName="space-y-4"
+      footer={
+        <>
+          <Button type="button" variant="outline" onClick={onClose}>
+            {t('Cancel')}
+          </Button>
+          <Button type="submit" form={PRODUCT_FORM_ID} disabled={loading}>
+            {loading ? t('Saving...') : t('Save')}
+          </Button>
+        </>
+      }
+    >
+      <Form {...form}>
+        <form
+          id={PRODUCT_FORM_ID}
+          onSubmit={form.handleSubmit(handleSave)}
+          className="space-y-4"
+        >
+          <FormField
+            control={form.control}
+            name="name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>
+                  {t('Product Name')} <span className="text-destructive">*</span>
+                </FormLabel>
+                <FormControl>
+                  <Input {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="description"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('Description')}</FormLabel>
+                <FormControl>
+                  <Textarea {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField
+              control={form.control}
+              name="price"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    {t('Price')} <span className="text-destructive">*</span>
+                  </FormLabel>
+                  <FormControl>
+                    <Input type="number" step="1" min={1} {...safeNumberFieldProps(field)} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="image_url"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Image URL')}</FormLabel>
+                  <FormControl>
+                    <Input {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </div>
-          <div className="grid gap-2">
-            <Label>{t('Description')}</Label>
-            <Textarea {...register('description')} />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label>
-                {t('Price')} <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                type="number"
-                step="1"
-                min="1"
-                {...register('price', {
-                  required: t('Price is required') as string,
-                  valueAsNumber: true,
-                  min: { value: 1, message: t('Price must be greater than 0') as string },
-                })}
-              />
-              {errors.price && <p className="text-xs text-destructive">{errors.price.message as string}</p>}
-            </div>
-            <div className="grid gap-2">
-              <Label>{t('Image URL')}</Label>
-              <Input {...register('image_url')} />
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground">{t('Stock is derived from imported cards and cannot be edited here')}</p>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>{t('Cancel')}</Button>
-            <Button type="submit" disabled={loading}>{loading ? t('Saving...') : t('Save')}</Button>
-          </DialogFooter>
+
+          <p className="text-xs text-muted-foreground">
+            {t('Stock is derived from imported cards and cannot be edited here')}
+          </p>
         </form>
-      </DialogContent>
-    </Dialog>
+      </Form>
+    </FormDialog>
   )
 }
 
