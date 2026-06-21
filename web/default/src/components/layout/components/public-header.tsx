@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
+import { ShoppingBagIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { cn } from '@/lib/utils'
@@ -78,6 +79,13 @@ export function PublicHeader(props: PublicHeaderProps) {
   const displaySiteName = customSiteName || systemName
   const links = dynamicLinks.length > 0 ? dynamicLinks : navLinks
 
+  // AI 账号商店是网站主打卖点，公共页顶栏也以渐变高亮入口突出展示（与控制台 AppHeader 一致）
+  const aiAccountActive = pathname.startsWith('/card-shop')
+  const aiAccountCtaClassName = cn(
+    'ms-1 gap-1.5 bg-gradient-to-r from-primary to-primary/80 text-primary-foreground shadow-sm transition-all hover:shadow-md hover:brightness-105',
+    aiAccountActive && 'ring-2 ring-primary/40 ring-offset-1 ring-offset-background'
+  )
+
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
     onScroll()
@@ -121,6 +129,18 @@ export function PublicHeader(props: PublicHeaderProps) {
     setAuthPromptTarget(null)
     navigate({ to: '/sign-in', search: { redirect } })
   }, [authPromptTarget?.href, navigate])
+
+  // 游客点击 AI 账号商店入口：card-shop 是需登录路由，复用与其它 requiresAuth 链接一致的登录提示流程
+  const handleAiAccountGuestClick = useCallback(
+    (closeMobile = false) => {
+      if (closeMobile) {
+        setMobileOpen(false)
+      }
+      setAuthPromptSecondsLeft(AUTH_PROMPT_SECONDS)
+      setAuthPromptTarget({ title: t('AI Account'), href: '/card-shop' })
+    },
+    [t]
+  )
 
   const handleNavLinkClick = useCallback(
     (
@@ -236,6 +256,27 @@ export function PublicHeader(props: PublicHeaderProps) {
                 )
               })}
 
+              {/* AI 账号商店高亮入口（主打卖点） */}
+              {isAuthenticated ? (
+                <Button
+                  size='sm'
+                  render={<Link to='/card-shop' />}
+                  className={aiAccountCtaClassName}
+                >
+                  <ShoppingBagIcon className='size-4' />
+                  <span className='hidden md:inline'>{t('AI Account')}</span>
+                </Button>
+              ) : (
+                <Button
+                  size='sm'
+                  onClick={() => handleAiAccountGuestClick()}
+                  className={aiAccountCtaClassName}
+                >
+                  <ShoppingBagIcon className='size-4' />
+                  <span className='hidden md:inline'>{t('AI Account')}</span>
+                </Button>
+              )}
+
               {(showLanguageSwitcher ||
                 showThemeSwitch ||
                 showNotifications) && (
@@ -328,6 +369,38 @@ export function PublicHeader(props: PublicHeaderProps) {
       >
         <div className='flex h-full flex-col justify-between px-8 pt-20 pb-10'>
           <nav className='flex flex-col gap-1'>
+            {/* AI 账号商店：移动端同样置顶高亮展示 */}
+            {isAuthenticated ? (
+              <Link
+                to='/card-shop'
+                onClick={() => setMobileOpen(false)}
+                className={cn(
+                  'mb-2 flex items-center gap-3 rounded-xl bg-gradient-to-r from-primary to-primary/80 px-4 py-3 text-base font-semibold text-primary-foreground shadow-sm transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] hover:brightness-105',
+                  mobileOpen
+                    ? 'translate-y-0 opacity-100'
+                    : 'translate-y-4 opacity-0'
+                )}
+                style={{ transitionDelay: mobileOpen ? '80ms' : '0ms' }}
+              >
+                <ShoppingBagIcon className='size-5' />
+                {t('AI Account')}
+              </Link>
+            ) : (
+              <button
+                type='button'
+                onClick={() => handleAiAccountGuestClick(true)}
+                className={cn(
+                  'mb-2 flex items-center gap-3 rounded-xl bg-gradient-to-r from-primary to-primary/80 px-4 py-3 text-left text-base font-semibold text-primary-foreground shadow-sm transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] hover:brightness-105',
+                  mobileOpen
+                    ? 'translate-y-0 opacity-100'
+                    : 'translate-y-4 opacity-0'
+                )}
+                style={{ transitionDelay: mobileOpen ? '80ms' : '0ms' }}
+              >
+                <ShoppingBagIcon className='size-5' />
+                {t('AI Account')}
+              </button>
+            )}
             {links.map((link, i) => {
               const isActive = pathname === link.href
               const linkClassName = cn(
