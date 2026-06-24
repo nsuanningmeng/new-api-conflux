@@ -1,4 +1,4 @@
-import { api } from '@/lib/api'
+import { api, type ApiRequestConfig } from '@/lib/api'
 import type { ApiResponse } from '../wallet/types'
 import type {
   ProductsResponse,
@@ -37,8 +37,13 @@ export async function getCardShopOrders(
   return res.data
 }
 
-export async function getCardShopOrderDetail(id: number): Promise<OrderDetailResponse> {
-  const res = await api.get(`/api/user/cardshop/orders/${id}`)
+export async function getCardShopOrderDetail(
+  id: number,
+  config?: ApiRequestConfig
+): Promise<OrderDetailResponse> {
+  // config 让支付成功页轮询时传入 skipBusinessError/skipErrorHandler，避免每 2s 轮询对
+  // 「订单不存在」等业务错误重复弹 toast；「我的订单」详情不传 config，行为不变。
+  const res = await api.get(`/api/user/cardshop/orders/${id}`, config)
   return res.data
 }
 

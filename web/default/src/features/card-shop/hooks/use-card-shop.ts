@@ -55,6 +55,35 @@ export function useOrderDetail(id: number) {
 }
 
 /**
+ * Hook for polling an order until the card is delivered.
+ *
+ * 支付成功页用：跳回成功页时「网关异步发卡」与「浏览器回跳」是并发的，卡密可能尚未发放，
+ * 故按固定间隔轮询订单详情，直到进入终态（delivered / cancelled）才停。组件侧再用墙钟超时
+ * （enabled 翻 false）兜住「迟迟不发」的极端情况，避免无限轮询。
+ */
+export function useCardShopOrderPolling(id: number, enabled: boolean, intervalMs = 2000) {
+  return useQuery({
+    queryKey: ['card-shop-order-poll', id],
+    // 轮询期间静默业务/网络错误，避免每 2s 弹一次 toast；成功页据 success===false 自行展示「未找到订单」。
+    queryFn: () =>
+      getCardShopOrderDetail(id, { skipBusinessError: true, skipErrorHandler: true }),
+    enabled: enabled && !!id,
+    // 不缓存复用：每次进入成功页都应拿最新状态
+    staleTime: 0,
+    gcTime: 0,
+    refetchInterval: (query) => {
+      const resp = query.state.data
+      // 业务报错（订单不存在 / 越权 / 已删除）即停轮询，交由页面展示错误态，避免无限轮询。
+      if (resp && resp.success === false) return false
+      const status = resp?.data?.order?.status
+      if (status === 'delivered' || status === 'cancelled') return false
+      return intervalMs
+    },
+    refetchOnWindowFocus: true,
+  })
+}
+
+/**
  * Admin: Hook for getting all products
  */
 export function useAdminCardShopProducts() {

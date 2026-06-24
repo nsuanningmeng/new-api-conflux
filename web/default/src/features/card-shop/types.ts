@@ -63,5 +63,7 @@ export type CreateOrderResponse = ApiResponse<{
   payment_url?: string
   checkout_url?: string
   qr_code?: string
-  order_id?: string
+  // 卡商城下单接口返回的是订单数字主键（order.ID）。后端用 gin.H 序列化为数字，
+  // 这里允许 number | string 以兼容历史与跨支付通道（充值通道曾返回 trade_no 字符串）。
+  order_id?: number | string
 }>

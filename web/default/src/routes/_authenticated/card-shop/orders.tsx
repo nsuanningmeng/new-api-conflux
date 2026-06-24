@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
-import { HistoryIcon, ClipboardIcon } from 'lucide-react'
-import { toast } from 'sonner'
+import { HistoryIcon } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { OrderList } from '@/features/card-shop/components/order-list'
+import { CardContentDisplay } from '@/features/card-shop/components/card-content-display'
 import { useCardShopOrders, useOrderDetail } from '@/features/card-shop/hooks/use-card-shop'
 import { DEFAULT_PAGE_SIZE } from '@/features/card-shop/constants'
 import type { CardShopOrder } from '@/features/card-shop/types'
@@ -31,20 +31,6 @@ function MyOrdersPage() {
   const { data: detailData, isLoading: detailLoading, isError: detailError } =
     useOrderDetail(detailOrderId)
   const cardContent = detailData?.data?.card?.card_content
-
-  const handleCopy = (content: string) => {
-    if (!content) return
-    // 在不安全上下文 / 无焦点 / 权限被拒时 writeText 会缺失或 reject——必须捕获并如实反馈，
-    // 不能无条件报告成功（卡密是用户唯一需要可靠拿到的值）。
-    if (!navigator.clipboard?.writeText) {
-      toast.error(t('Copy failed'))
-      return
-    }
-    navigator.clipboard
-      .writeText(content)
-      .then(() => toast.success(t('Copied to clipboard')))
-      .catch(() => toast.error(t('Copy failed')))
-  }
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
@@ -114,22 +100,7 @@ function MyOrdersPage() {
                     {t('Failed to load card details')}
                   </div>
                 ) : (
-                  <div className="relative">
-                    <pre className="p-4 bg-muted rounded-lg font-mono text-xs whitespace-pre-wrap break-all border overflow-auto max-h-48">
-                      {cardContent || t('No content available')}
-                    </pre>
-                    <Button
-                      variant="secondary"
-                      size="icon-xs"
-                      aria-label={t('Copy')}
-                      title={t('Copy')}
-                      disabled={!cardContent}
-                      className="absolute top-2 right-2"
-                      onClick={() => handleCopy(cardContent || '')}
-                    >
-                      <ClipboardIcon className="size-3" />
-                    </Button>
-                  </div>
+                  <CardContentDisplay content={cardContent} />
                 )}
               </div>
             ) : (

@@ -57,6 +57,7 @@ import { Route as AuthenticatedModelsSectionRouteImport } from './routes/_authen
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedDashboardSectionRouteImport } from './routes/_authenticated/dashboard/$section'
 import { Route as AuthenticatedChatChatIdRouteImport } from './routes/_authenticated/chat/$chatId'
+import { Route as AuthenticatedCardShopSuccessRouteImport } from './routes/_authenticated/card-shop/success'
 import { Route as AuthenticatedCardShopOrdersRouteImport } from './routes/_authenticated/card-shop/orders'
 import { Route as authUserResetRouteImport } from './routes/(auth)/user/reset'
 import { Route as AuthenticatedSystemSettingsSiteIndexRouteImport } from './routes/_authenticated/system-settings/site/index'
@@ -328,6 +329,12 @@ const AuthenticatedChatChatIdRoute = AuthenticatedChatChatIdRouteImport.update({
   path: '/chat/$chatId',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedCardShopSuccessRoute =
+  AuthenticatedCardShopSuccessRouteImport.update({
+    id: '/card-shop/success',
+    path: '/card-shop/success',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedCardShopOrdersRoute =
   AuthenticatedCardShopOrdersRouteImport.update({
     id: '/card-shop/orders',
@@ -454,6 +461,7 @@ export interface FileRoutesByFullPath {
   '/setup/': typeof SetupIndexRoute
   '/user/reset': typeof authUserResetRoute
   '/card-shop/orders': typeof AuthenticatedCardShopOrdersRoute
+  '/card-shop/success': typeof AuthenticatedCardShopSuccessRoute
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
@@ -517,6 +525,7 @@ export interface FileRoutesByTo {
   '/setup': typeof SetupIndexRoute
   '/user/reset': typeof authUserResetRoute
   '/card-shop/orders': typeof AuthenticatedCardShopOrdersRoute
+  '/card-shop/success': typeof AuthenticatedCardShopSuccessRoute
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
@@ -584,6 +593,7 @@ export interface FileRoutesById {
   '/setup/': typeof SetupIndexRoute
   '/(auth)/user/reset': typeof authUserResetRoute
   '/_authenticated/card-shop/orders': typeof AuthenticatedCardShopOrdersRoute
+  '/_authenticated/card-shop/success': typeof AuthenticatedCardShopSuccessRoute
   '/_authenticated/chat/$chatId': typeof AuthenticatedChatChatIdRoute
   '/_authenticated/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
@@ -650,6 +660,7 @@ export interface FileRouteTypes {
     | '/setup/'
     | '/user/reset'
     | '/card-shop/orders'
+    | '/card-shop/success'
     | '/chat/$chatId'
     | '/dashboard/$section'
     | '/errors/$error'
@@ -713,6 +724,7 @@ export interface FileRouteTypes {
     | '/setup'
     | '/user/reset'
     | '/card-shop/orders'
+    | '/card-shop/success'
     | '/chat/$chatId'
     | '/dashboard/$section'
     | '/errors/$error'
@@ -779,6 +791,7 @@ export interface FileRouteTypes {
     | '/setup/'
     | '/(auth)/user/reset'
     | '/_authenticated/card-shop/orders'
+    | '/_authenticated/card-shop/success'
     | '/_authenticated/chat/$chatId'
     | '/_authenticated/dashboard/$section'
     | '/_authenticated/errors/$error'
@@ -1176,6 +1189,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedChatChatIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/card-shop/success': {
+      id: '/_authenticated/card-shop/success'
+      path: '/card-shop/success'
+      fullPath: '/card-shop/success'
+      preLoaderRoute: typeof AuthenticatedCardShopSuccessRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/card-shop/orders': {
       id: '/_authenticated/card-shop/orders'
       path: '/card-shop/orders'
@@ -1378,6 +1398,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSystemSettingsRouteRoute: typeof AuthenticatedSystemSettingsRouteRouteWithChildren
   AuthenticatedChat2linkRoute: typeof AuthenticatedChat2linkRoute
   AuthenticatedCardShopOrdersRoute: typeof AuthenticatedCardShopOrdersRoute
+  AuthenticatedCardShopSuccessRoute: typeof AuthenticatedCardShopSuccessRoute
   AuthenticatedChatChatIdRoute: typeof AuthenticatedChatChatIdRoute
   AuthenticatedDashboardSectionRoute: typeof AuthenticatedDashboardSectionRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
@@ -1402,6 +1423,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedSystemSettingsRouteRouteWithChildren,
   AuthenticatedChat2linkRoute: AuthenticatedChat2linkRoute,
   AuthenticatedCardShopOrdersRoute: AuthenticatedCardShopOrdersRoute,
+  AuthenticatedCardShopSuccessRoute: AuthenticatedCardShopSuccessRoute,
   AuthenticatedChatChatIdRoute: AuthenticatedChatChatIdRoute,
   AuthenticatedDashboardSectionRoute: AuthenticatedDashboardSectionRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,

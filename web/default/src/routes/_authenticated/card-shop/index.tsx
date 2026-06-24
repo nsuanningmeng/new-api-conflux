@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { ProductCard } from '@/features/card-shop/components/product-card'
 import { ProductDetailDialog } from '@/features/card-shop/components/product-detail-dialog'
 import { useCardShopProducts, useCreateOrder } from '@/features/card-shop/hooks/use-card-shop'
+import { LAST_ORDER_STORAGE_KEY } from '@/features/card-shop/constants'
 import type { CardShopProduct } from '@/features/card-shop/types'
 
 export const Route = createFileRoute('/_authenticated/card-shop/')({
@@ -28,6 +29,15 @@ function CardShopPage() {
       const res = await createOrder.mutateAsync(product.id)
       // 仅处理成功路径；业务失败（success:false）与网络错误均由 axios 拦截器统一弹出 res.message，避免重复 toast。
       if (res.success && res.data) {
+        // 跳转去网关前持久化订单 id，作为支付成功页（/card-shop/success）定位订单的兜底：
+        // 网关回跳可能不透传 order_id query，此时成功页可据此 localStorage 恢复并轮询发卡结果。
+        if (res.data.order_id != null) {
+          try {
+            window.localStorage.setItem(LAST_ORDER_STORAGE_KEY, String(res.data.order_id))
+          } catch {
+            /* 隐私模式 / 存储已满等忽略：仅退化为依赖 query 参数 */
+          }
+        }
         const url = res.data.payment_url || res.data.checkout_url
         if (url && isSafeHttpPaymentUrl(url, true)) {
           window.location.href = url
